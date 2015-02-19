@@ -1,6 +1,16 @@
 #ifndef __LIBMAPPING_LIB_H__
 #define __LIBMAPPING_LIB_H__
 
+#define LM_ASSERT(V) LM_ASSERT_PRINTF(V, "bye!\n")
+
+#define LM_ASSERT_PRINTF(V, ...) \
+	if (unlikely(!(V))) { \
+		lm_printf(PRINTF_PREFIX "sanity error!\nfile %s at line %u assertion failed!\n%s\n", __FILE__, __LINE__, #V); \
+		lm_printf(__VA_ARGS__); \
+		exit(1); \
+	}
+
+#define PRINTF_PREFIX "libmapping: "
 
 #define lm_printf(...) printf(__VA_ARGS__)
 #define lm_fprintf(out, ...) printf(__VA_ARGS__)

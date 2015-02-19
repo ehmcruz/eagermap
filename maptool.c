@@ -6,6 +6,7 @@
 
 #include "libmapping.h"
 
+#define PRINTF_UINT64  "%" PRIu64
 
 #define INCS \
 	s++;\
@@ -121,11 +122,12 @@ int main(int argc, char **argv)
 	void *alg;
 	thread_map_alg_map_t mapdata;
 	topology_t *topology;
+	uint32_t *pus = NULL;
 	static const char *topofrom[2] = { "native", "fake" };
 	static uint32_t map[MAX_THREADS];
 	
-	if (argc < 3  || argc > 7) {
-		printf("%s csv algorithm [arities] [weights]\nImportant: arities/weights starting from the root node\n", argv[0]);
+	if (argc != 3) {
+		printf("%s csv arities\nImportant: arities starting from the root node\n", argv[0]);
 		return 1;
 	}
 
@@ -150,72 +152,19 @@ int main(int argc, char **argv)
 
 	LM_ASSERT(nt <= MAX_THREADS)
 
-	if (argc >= 4) {
-		uint32_t *pus = NULL;
-		
-		nlevels = to_vector(argv[3], arities, 50);
+	nlevels = to_vector(argv[3], arities, 50);
 
-		libmapping_get_n_pus_fake_topology(arities, nlevels, &npus, &nvertices);
+	libmapping_get_n_pus_fake_topology(arities, nlevels, &npus, &nvertices);
 
-		if (argc >= 5) {
-			uint32_t w[50], n;
-			static weight_t ww[50];
-						
-			n = to_vector(argv[4], w, 50);
-			LM_ASSERT(n == nlevels)
-			
-			weights = ww;
-			
-			for (i=0; i<n; i++)
-				weights[i] = w[i];
-		}
-		else
-			weights = NULL;
-			
-		if (argc >= 6) {
-			forced_mapping_n = 0;
-			printf("with forced mapping\n");
-			forced_mapping_n = to_vector(argv[5], map, MAX_THREADS);
-			LM_ASSERT(forced_mapping_n >= nt)
-			printf("%u threads set map: ", forced_mapping_n);
-			for (i=0; i<nt; i++) {
-				printf("%u,", map[i]);
-				// for (j=i+1; j<nt; j++) {
-				// 	LM_ASSERT(map[i] != map[j])
-				// }
-			}
-			printf("\n");
-		}
-		
-		if (argc >= 7) {
-			static uint32_t pu_ids[1024];
-			uint32_t my_npus;
-			
-			printf("with forced pu ids ");
-			my_npus = to_vector(argv[6], pu_ids, 1024);
-			LM_ASSERT(npus == my_npus)
-			pus = pu_ids;
-
-			for (i=0; i<npus; i++) {
-				printf("%u,", pus[i]);
-				for (j=i+1; j<npus; j++) {
-					LM_ASSERT(pus[i] != pus[j])
-				}
-			}
-			printf("\n");
-		}
-		
-		topology->pu_number = npus;
-		libmapping_graph_init(&topology->graph, nvertices, nvertices-1);
-		topology->root = libmapping_create_fake_topology(arities, nlevels, pus, weights);
-		topology->root->weight = 0;
-		topology->root->type = GRAPH_ELTYPE_ROOT;
-		
-		libmapping_topology_analysis(topology);
-	}
-	else {
-		libmapping_topology_init();
-	}
+	weights = NULL;
+	
+	topology->pu_number = npus;
+	libmapping_graph_init(&topology->graph, nvertices, nvertices-1);
+	topology->root = libmapping_create_fake_topology(arities, nlevels, pus, weights);
+	topology->root->weight = 0;
+	topology->root->type = GRAPH_ELTYPE_ROOT;
+	
+	libmapping_topology_analysis(topology);
 	
 	threads_per_pu = (uint32_t)malloc(topology->pu_number);
 	LM_ASSERT(threads_per_pu != NULL)
