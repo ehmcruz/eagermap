@@ -34,3 +34,30 @@ void libmapping_matrix_free(void *m)
 	lm_free(p[0]);
 	lm_free(p);
 }
+
+void libmapping_comm_matrix_init (comm_matrix_t *m, uint32_t nthreads)
+{
+	m->nthreads = nthreads;
+}
+
+char* libmapping_strtok(char *str, char *tok, char del, uint32_t bsize)
+{
+	char *p;
+	uint32_t i;
+
+	for (p=str, i=0; *p && *p != del; p++, i++) {
+		LM_ASSERT(i < (bsize-1))
+		*tok = *p;
+		tok++;
+	}
+
+	*tok = 0;
+	
+	if (*p)
+		return p + 1;
+	else if (p != str)
+		return p;
+	else
+		return NULL;
+}
+

@@ -328,7 +328,7 @@ static void topology_analysis_ (topology_t *t, topology_t *orig)
 	}
 
 	if (orig == NULL) {
-		t->page_size = 1 << RubyConfig::pageSizeBits();
+		t->page_size = 1 << 12;
 		t->page_shift = libmapping_get_log2(t->page_size);
 		t->offset_addr_mask = t->page_size - 1;
 		t->page_addr_mask = ~t->offset_addr_mask;

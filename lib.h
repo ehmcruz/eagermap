@@ -4,7 +4,7 @@
 #define LM_ASSERT(V) LM_ASSERT_PRINTF(V, "bye!\n")
 
 #define LM_ASSERT_PRINTF(V, ...) \
-	if (unlikely(!(V))) { \
+	if ((!(V))) { \
 		lm_printf(PRINTF_PREFIX "sanity error!\nfile %s at line %u assertion failed!\n%s\n", __FILE__, __LINE__, #V); \
 		lm_printf(__VA_ARGS__); \
 		exit(1); \
@@ -54,5 +54,7 @@ void libmapping_comm_matrix_destroy (comm_matrix_t *m);
 
 uint64_t libmapping_get_next_power_of_two (uint64_t v);
 uint8_t libmapping_get_log2 (uint64_t v);
+
+char* libmapping_strtok(char *str, char *tok, char del, uint32_t bsize);
 
 #endif

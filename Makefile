@@ -1,7 +1,7 @@
 CC=gcc
 CPP=g++
 AR=ar
-CFLAGS=-O2 -fPIC -ggdb -Wall -fopenmp
+CFLAGS=-O2 -ggdb -Wall
 LDFLAGS=-lpthread -lm
 
 #################################################################

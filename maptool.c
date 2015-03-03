@@ -109,11 +109,10 @@ static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 int main(int argc, char **argv)
 {
 	uint32_t arities[50];
-	static uint32_t forced_mapping_n = 0;
 	static comm_matrix_t m;
 	uint32_t i, j, nt, fsize;
-	uint32_t nlevels, npus=0, nvertices, *threads_per_pu;
-	weight_t *weights;
+	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
+	weight_t *weights=NULL;
 	FILE *fp;
 	char *buffer;
 	struct timeval timer_begin, timer_end;
@@ -133,7 +132,7 @@ int main(int argc, char **argv)
 
 	topology = libmapping_topology_get();
 
-	printf("hello world file %s topo from %s\n", argv[1], topofrom[argc == 4]);
+	printf("file %s\n", argv[1]);
 	
 	fp = fopen(argv[1], "r");
 	assert(fp != NULL);
@@ -148,13 +147,16 @@ int main(int argc, char **argv)
 
 	nt = parse_csv(buffer, fsize, &m);
 	free(buffer);
+	
+	printf("comm matrix parsed\n");
 /*	libmapping_print_matrix(&m, stdout);*/
 
 	LM_ASSERT(nt <= MAX_THREADS)
 
-	nlevels = to_vector(argv[3], arities, 50);
+	nlevels = to_vector(argv[2], arities, 50);
 
 	libmapping_get_n_pus_fake_topology(arities, nlevels, &npus, &nvertices);
+	printf("topology with %u levels and %u pus and %u vertices\n", nlevels, npus, nvertices);
 
 	weights = NULL;
 	
@@ -169,28 +171,29 @@ int main(int argc, char **argv)
 	threads_per_pu = (uint32_t)malloc(topology->pu_number);
 	LM_ASSERT(threads_per_pu != NULL)
 	
-	for (i=0; i<MAX_THREADS; i++) {
-		libmapping_threads[i].stat = THREAD_DEAD;
-	#ifdef LIBMAPPING_STATS_THREAD_LOAD
-		libmapping_threads[i].time_start = 0;
-		libmapping_threads[i].time_end = 1;
-		libmapping_threads[i].time_running = 1;
-	#endif
-		libmapping_alive_threads[i] = &libmapping_threads[i];
-	}
+/*	for (i=0; i<MAX_THREADS; i++) {*/
+/*		libmapping_threads[i].stat = THREAD_DEAD;*/
+/*	#ifdef LIBMAPPING_STATS_THREAD_LOAD*/
+/*		libmapping_threads[i].time_start = 0;*/
+/*		libmapping_threads[i].time_end = 1;*/
+/*		libmapping_threads[i].time_running = 1;*/
+/*	#endif*/
+/*		libmapping_alive_threads[i] = &libmapping_threads[i];*/
+/*	}*/
 
-	if (forced_mapping_n == 0)
-		alg = libmapping_mapping_algorithm_setup(topology, argv[2]);
+{
+	thread_map_alg_init_t init;
+	init.topology = topology;
+	libmapping_mapping_algorithm_greedy_init(&init);
+}
+
 	printf("topology set\n");
 
-	mapdata.foo = alg;
 	mapdata.m_init = &m;
 	mapdata.map = map;
-	mapdata.alive_threads = libmapping_alive_threads;
 	
 	gettimeofday(&timer_begin, NULL);
-	if (forced_mapping_n == 0)
-		libmapping_mapping_algorithm_map(&mapdata);
+	libmapping_mapping_algorithm_greedy_map(&mapdata);
 	gettimeofday(&timer_end, NULL);
 	
 	for (i=0; i<topology->pu_number; i++) {
