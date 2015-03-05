@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <assert.h>
+#include <sys/time.h>
 
 #include "libmapping.h"
 
@@ -118,11 +119,9 @@ int main(int argc, char **argv)
 	struct timeval timer_begin, timer_end;
 	double elapsed;
 	double quality;
-	void *alg;
 	thread_map_alg_map_t mapdata;
 	topology_t *topology;
 	uint32_t *pus = NULL;
-	static const char *topofrom[2] = { "native", "fake" };
 	static uint32_t map[MAX_THREADS];
 	
 	if (argc != 3) {
@@ -168,7 +167,7 @@ int main(int argc, char **argv)
 	
 	libmapping_topology_analysis(topology);
 	
-	threads_per_pu = (uint32_t)malloc(topology->pu_number);
+	threads_per_pu = (uint32_t*)malloc(topology->pu_number);
 	LM_ASSERT(threads_per_pu != NULL)
 	
 /*	for (i=0; i<MAX_THREADS; i++) {*/

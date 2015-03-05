@@ -1,8 +1,8 @@
 CC=gcc
 CPP=g++
 AR=ar
-CFLAGS=-O2 -ggdb -Wall
-LDFLAGS=-lpthread -lm
+CFLAGS=-O2 -g -Wall
+LDFLAGS=
 
 #################################################################
 
@@ -16,16 +16,12 @@ objfiles=$(patsubst %.c,%.o,$(csrcfiles))
 %.o: %.c $(headerfiles)
 	$(CC) -c $(CFLAGS) $< -o $@
 
-%.o: %.cpp $(headerfiles)
-	$(CPP) -c $(CPPFLAGS) $< -o $@
-
 #################################################################
 
-all: $(objfiles)
-	gcc -o maptool $(objfiles) $(CFLAGS) $(LDFLAGS)
-	@echo "Compiled! Yes!"
+all: eagermap
+
+eagermap: $(objfiles)
+	gcc -o $@ $(objfiles) $(CFLAGS) $(LDFLAGS)
 
 clean:
-	- rm -f *.o
-	- rm -f maptool
-
+	rm -f *.o eagermap
