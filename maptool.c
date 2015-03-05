@@ -59,7 +59,6 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	}
 	
 	libmapping_comm_matrix_init(m, nt);
-	printf("matrix malloc %u threads\n", nt);
 	
 	s = buffer;
 	
@@ -125,14 +124,12 @@ int main(int argc, char **argv)
 	static uint32_t map[MAX_THREADS];
 	
 	if (argc != 3) {
-		printf("%s csv arities\nImportant: arities starting from the root node\n", argv[0]);
+		printf("Usage: %s <csv file> <arities>\nImportant: arities start from the root node\n", argv[0]);
 		return 1;
 	}
 
 	topology = libmapping_topology_get();
 
-	printf("file %s\n", argv[1]);
-	
 	fp = fopen(argv[1], "r");
 	assert(fp != NULL);
 	fseek(fp, 0, SEEK_END);
@@ -146,16 +143,13 @@ int main(int argc, char **argv)
 
 	nt = parse_csv(buffer, fsize, &m);
 	free(buffer);
-	
-	printf("comm matrix parsed\n");
-/*	libmapping_print_matrix(&m, stdout);*/
 
 	LM_ASSERT(nt <= MAX_THREADS)
 
 	nlevels = to_vector(argv[2], arities, 50);
 
 	libmapping_get_n_pus_fake_topology(arities, nlevels, &npus, &nvertices);
-	printf("topology with %u levels and %u pus and %u vertices\n", nlevels, npus, nvertices);
+	printf("Hardware topology with %u levels, %u PUs and %u vertices\n", nlevels, npus, nvertices);
 
 	weights = NULL;
 	
@@ -186,8 +180,6 @@ int main(int argc, char **argv)
 	libmapping_mapping_algorithm_greedy_init(&init);
 }
 
-	printf("topology set\n");
-
 	mapdata.m_init = &m;
 	mapdata.map = map;
 	
@@ -209,24 +201,29 @@ int main(int argc, char **argv)
 			quality += comm_matrix_el(m, i, j) / (libmapping_topology_dist_pus(topology, map[i], map[j]) + 1.0);
 		}
 	}
-	
+
 	elapsed = timer_end.tv_sec - timer_begin.tv_sec + (timer_end.tv_usec - timer_begin.tv_usec) / 1000000.0;
 
-	printf("Number of threads: %u\n", nt);
-	printf("MAP ");
+	printf("Number of tasks in communication matrix: %u\n", nt);
+
+	printf("Tasks per PU: ");
+	for (i=0; i<topology->pu_number; i++){
+		printf("%d", threads_per_pu[i]);
+		if (i!=topology->pu_number-1)
+			printf(",");
+	}
+	printf("\n");
+
+	printf("Execution time of the algorithm: %.4fms\n", elapsed*1000.0);
+	printf("Mapping quality (higher is better): %.4f\n", quality);
+
+	printf("Mapping: ");
 	for (i=0; i<nt; i++){
 		printf("%d", map[i]);
 		if (i < (nt-1))
 			printf(",");
 	}
-	printf("\n\n");
-	printf("threads per pu: ");
-	for (i=0; i<topology->pu_number; i++){
-		printf("%d,", threads_per_pu[i]);
-	}
 	printf("\n");
-	printf("time: %.4fms\n", elapsed*1000.0);
-	printf("quality (higher is better): %.4f\n", quality);
 	
 	return 0;
 }
