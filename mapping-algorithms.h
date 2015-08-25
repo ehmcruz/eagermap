@@ -5,9 +5,23 @@ typedef struct thread_map_alg_init_t {
 	topology_t *topology;
 } thread_map_alg_init_t;
 
+typedef enum group_type_t {
+	GROUP_TYPE_THREAD,
+	GROUP_TYPE_GROUP
+} group_type_t;
+
+typedef struct thread_group_t {
+	group_type_t type;
+	uint32_t id;
+	uint32_t nelements;
+	double load;
+	struct thread_group_t *elements[MAX_THREADS];
+} thread_group_t;
+
 typedef struct thread_map_alg_map_t {
 	// input
 	comm_matrix_t *m_init;
+	thread_group_t **alive_threads;
 
 	// output
 	uint32_t *map;

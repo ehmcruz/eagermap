@@ -49,7 +49,7 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	uint64_t v;
 	uint32_t nt;
 	static char NUMBER[100];
-	
+
 	s = buffer;
 	nt = 1;
 	while (*s != '\n') {
@@ -57,11 +57,11 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 			nt++;
 		s++;
 	}
-	
+
 	libmapping_comm_matrix_init(m, nt);
-	
+
 	s = buffer;
-	
+
 	trow = nt - 1;
 	for (i=0; i<nt; i++) {
 		for (j=0; j<nt; j++) {
@@ -76,13 +76,13 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 			trow--;
 		}
 	}
-	
+
 	// assert we found the end of the file
 	while (*s) {
 		assert(*s == '\n' || *s == '\t' || *s == '\r' || *s == ' ');
 		s++;
 	}
-	
+
 	return nt;
 }
 
@@ -90,19 +90,19 @@ static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {
 	char tok[32], *p;
 	uint32_t i;
-	
+
 	p = str;
-	
+
 	p = libmapping_strtok(p, tok, ',', 32);
 	i = 0;
-	
+
 	while (p != NULL) {
 		assert(i < n);
 /*dprintf("token %s\n", tok);*/
 		vec[i++] = atoi(tok);
 		p = libmapping_strtok(p, tok, ',', 32);
 	}
-	
+
 	return i;
 }
 
@@ -122,7 +122,7 @@ int main(int argc, char **argv)
 	topology_t *topology;
 	uint32_t *pus = NULL;
 	static uint32_t map[MAX_THREADS];
-	
+
 	if (argc != 3) {
 		printf("Usage: %s <csv file> <arities>\nImportant: arities start from the root node\n", argv[0]);
 		return 1;
@@ -152,18 +152,18 @@ int main(int argc, char **argv)
 	printf("Hardware topology with %u levels, %u PUs and %u vertices\n", nlevels, npus, nvertices);
 
 	weights = NULL;
-	
+
 	topology->pu_number = npus;
 	libmapping_graph_init(&topology->graph, nvertices, nvertices-1);
 	topology->root = libmapping_create_fake_topology(arities, nlevels, pus, weights);
 	topology->root->weight = 0;
 	topology->root->type = GRAPH_ELTYPE_ROOT;
-	
+
 	libmapping_topology_analysis(topology);
-	
+
 	threads_per_pu = (uint32_t*)malloc(topology->pu_number);
 	LM_ASSERT(threads_per_pu != NULL)
-	
+
 /*	for (i=0; i<MAX_THREADS; i++) {*/
 /*		libmapping_threads[i].stat = THREAD_DEAD;*/
 /*	#ifdef LIBMAPPING_STATS_THREAD_LOAD*/
@@ -177,23 +177,23 @@ int main(int argc, char **argv)
 {
 	thread_map_alg_init_t init;
 	init.topology = topology;
-	libmapping_mapping_algorithm_greedy_init(&init);
+	libmapping_mapping_algorithm_greedy_lb_init(&init);
 }
 
 	mapdata.m_init = &m;
 	mapdata.map = map;
-	
+
 	gettimeofday(&timer_begin, NULL);
-	libmapping_mapping_algorithm_greedy_map(&mapdata);
+	libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
 	gettimeofday(&timer_end, NULL);
-	
+
 	for (i=0; i<topology->pu_number; i++) {
 		threads_per_pu[i] = 0;
 	}
 	for (i=0; i<nt; i++) {
 		threads_per_pu[ map[i] ]++;
 	}
-	
+
 	quality = 0.0;
 	for (i=0; i<nt-1; i++) {
 		for (j=i+1; j<nt; j++) {
@@ -224,6 +224,6 @@ int main(int argc, char **argv)
 			printf(",");
 	}
 	printf("\n");
-	
+
 	return 0;
 }
