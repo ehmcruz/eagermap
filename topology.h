@@ -26,6 +26,11 @@ typedef struct topology_t {
 	uint32_t *dist_pus_;
 } topology_t;
 
+typedef struct machine_t {
+	char name[256];
+	topology_t topology;
+} machine_t;
+
 extern topology_t libmapping_topology;
 
 void libmapping_topology_init (void);

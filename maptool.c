@@ -86,6 +86,14 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	return nt;
 }
 
+/*
+	machine file format:
+	
+	number_of_machines
+	(machine_name[i] arities_mem_hierarchy)*
+	(i arity (j latency)*)*
+*/
+
 static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {
 	char tok[32], *p;
