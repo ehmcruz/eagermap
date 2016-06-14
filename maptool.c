@@ -4,8 +4,11 @@
 #include <math.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <ctype.h>
 
 #include "libmapping.h"
+
+machine_t *machines = NULL;
 
 #define PRINTF_UINT64  "%" PRIu64
 
@@ -29,10 +32,35 @@
 		sscanf(NUMBER, PRINTF_UINT64 , &V);\
 	}
 
+#define READ_STR(STR) {\
+		char *i;\
+		if (!isalpha(*s)) {\
+			printf("n eh uma letra code %u pos %u\n", (uint32_t)*s, (uint32_t)(s-buffer));\
+			assert(0);\
+		}\
+		i = STR;\
+		*i = *s;\
+		s++;\
+		i++;\
+		while (isalnum(*s)) {\
+			*i = *s;\
+			s++;\
+			i++;\
+		}\
+		*i = 0;\
+	}
+
 #define SKIP_SPACE \
 	while (*s == ' ' || *s == '\t') {\
 		INCS\
 	}
+
+#define FORCE_SKIP_SPACE \
+	if (!(*s == ' ' || *s == '\t')) {\
+		printf("require space\n");\
+		assert(0);\
+	}\
+	SKIP_SPACE
 
 #define SKIP_NEWLINE \
 	assert(*s == '\n');\
@@ -48,7 +76,7 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	uint32_t i, j, trow;
 	uint64_t v;
 	uint32_t nt;
-	static char NUMBER[100];
+	char NUMBER[100];
 	
 	s = buffer;
 	nt = 1;
@@ -94,7 +122,31 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	(i arity (j latency)*)*
 */
 
-
+static uint32_t parse_machines (char *buffer, uint32_t blen)
+{
+	char *s;
+	char NUMBER[100];
+	char str[100];
+	
+	s = buffer;
+	
+	SKIP_SPACE
+	READ_STR(str)
+	if (strcmp(str, "machine")) {
+		printf("needs to start with the machines\n");
+		exit(1);
+	}
+	SKIP_SPACE
+	if (*s != ':') {
+		printf("needs : after the machine label\n");
+		exit(1);
+	}
+	s++;
+	
+	while (*s) {
+		READ_STR(str)
+	}
+}
 
 static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {

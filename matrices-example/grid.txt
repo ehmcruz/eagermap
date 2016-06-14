@@ -1,0 +1,7 @@
+machines:
+draco1 2,8,2
+draco2 2,8,2
+draco3 2,8,2
+draco4 2,8,2
+links:
+draco1 draco3 10
