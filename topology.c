@@ -5,11 +5,6 @@ struct topology_walk_tmp_t {
 	uint32_t i, j;
 };
 
-topology_t libmapping_topology;
-
-// too lazy to replace topology to libmapping_topology
-#define topology libmapping_topology
-
 #define dist(i, j) dist_[ ((i) << dist_dim_log) + (j) ]
 #define dist_pus(i, j) t->dist_pus_[ ((i) << t->dist_pus_dim_log) + (j) ]
 
@@ -94,12 +89,6 @@ void libmapping_topology_walk_pre_order (topology_t *topology, libmapping_topolo
 	topology_walk_pre_order(routine, topology->root, NULL, NULL, data, 0);
 }
 
-topology_t* libmapping_topology_get ()
-{
-	return &topology;
-}
-
-
 void libmapping_get_n_pus_fake_topology (uint32_t *arities, uint32_t nlevels, uint32_t *npus, uint32_t *nvertices)
 {
 	int j;
@@ -115,13 +104,13 @@ void libmapping_get_n_pus_fake_topology (uint32_t *arities, uint32_t nlevels, ui
 	}
 }
 
-static vertex_t* create_fake_topology (uint32_t level, uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights, uint32_t numa_node)
+static vertex_t* create_fake_topology (topology_t *topology, uint32_t level, uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights, uint32_t numa_node)
 {
 	int j;
 	vertex_t *v, *link;
 	edge_t *e;
 
-	v = libmapping_get_free_vertex(&topology.graph);
+	v = libmapping_get_free_vertex(&topology->graph);
 
 	if (nlevels == 0) {
 		static uint32_t id = 0;
@@ -143,8 +132,8 @@ static vertex_t* create_fake_topology (uint32_t level, uint32_t *arities, uint32
 			v->id = 0;
 		}
 		for (j=0; j < *arities; j++) {
-			link = create_fake_topology(level+1, arities+1, nlevels-1, pus, (weights == NULL) ? NULL : weights+1, numa_node);
-			e = libmapping_graph_connect_vertices(&topology.graph, v, link);
+			link = create_fake_topology(topology, level+1, arities+1, nlevels-1, pus, (weights == NULL) ? NULL : weights+1, numa_node);
+			e = libmapping_graph_connect_vertices(&topology->graph, v, link);
 			if (weights == NULL)
 				e->weight = 1 << (nlevels);
 			else
@@ -156,9 +145,9 @@ static vertex_t* create_fake_topology (uint32_t level, uint32_t *arities, uint32
 	return v;
 }
 
-vertex_t* libmapping_create_fake_topology(uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights)
+vertex_t* libmapping_create_fake_topology(topology_t *topology, uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights)
 {
-	return create_fake_topology(0, arities, nlevels, pus, weights, 0);
+	return create_fake_topology(topology, 0, arities, nlevels, pus, weights, 0);
 }
 
 static int print_topology(void *d, vertex_t *v, vertex_t *from, edge_t *edge, uint32_t level)

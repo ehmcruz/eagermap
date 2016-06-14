@@ -94,6 +94,8 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	(i arity (j latency)*)*
 */
 
+
+
 static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {
 	char tok[32], *p;
@@ -127,7 +129,7 @@ int main(int argc, char **argv)
 	double elapsed;
 	double quality;
 	thread_map_alg_map_t mapdata;
-	topology_t *topology;
+	topology_t topo_, *topology;
 	uint32_t *pus = NULL;
 	static uint32_t map[MAX_THREADS];
 	
@@ -136,7 +138,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	topology = libmapping_topology_get();
+	topology = &topo_;
 
 	fp = fopen(argv[1], "r");
 	assert(fp != NULL);
@@ -163,7 +165,7 @@ int main(int argc, char **argv)
 	
 	topology->pu_number = npus;
 	libmapping_graph_init(&topology->graph, nvertices, nvertices-1);
-	topology->root = libmapping_create_fake_topology(arities, nlevels, pus, weights);
+	topology->root = libmapping_create_fake_topology(topology, arities, nlevels, pus, weights);
 	topology->root->weight = 0;
 	topology->root->type = GRAPH_ELTYPE_ROOT;
 	

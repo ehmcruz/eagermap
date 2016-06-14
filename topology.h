@@ -31,19 +31,12 @@ typedef struct machine_t {
 	topology_t topology;
 } machine_t;
 
-extern topology_t libmapping_topology;
-
 void libmapping_topology_init (void);
 void libmapping_topology_destroy (void);
 
 static inline uint32_t libmapping_topology_dist_pus (topology_t *t, uint32_t pu1, uint32_t pu2)
 {
 	return t->dist_pus_[ (pu1 << t->dist_pus_dim_log) + pu2 ];
-}
-
-static inline uint32_t libmapping_topology_numa_node_of_pu (uint32_t pu)
-{
-	return libmapping_topology.pus_to_numa_node[pu];
 }
 
 typedef int (*libmapping_topology_walk_routine_t)(void*, vertex_t*, vertex_t*, edge_t*, uint32_t);
@@ -54,11 +47,9 @@ void libmapping_topology_walk_pre_order(topology_t *topology, libmapping_topolog
 
 void libmapping_topology_analysis (topology_t *t);
 
-topology_t* libmapping_topology_get(void);
-
 void libmapping_topology_print (topology_t *t);
 
-vertex_t* libmapping_create_fake_topology (uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights);
+vertex_t* libmapping_create_fake_topology (topology_t *topology, uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights);
 void libmapping_get_n_pus_fake_topology (uint32_t *arities, uint32_t nlevels, uint32_t *npus, uint32_t *nvertices);
 
 #endif
