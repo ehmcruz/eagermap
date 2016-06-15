@@ -9,6 +9,7 @@
 #include "libmapping.h"
 
 machine_t *machines = NULL;
+int nmachines = 0;
 
 #define PRINTF_UINT64  "%" PRIu64
 
@@ -114,40 +115,6 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	return nt;
 }
 
-/*
-	machine file format:
-	
-	number_of_machines
-	(machine_name[i] arities_mem_hierarchy)*
-	(i arity (j latency)*)*
-*/
-
-static uint32_t parse_machines (char *buffer, uint32_t blen)
-{
-	char *s;
-	char NUMBER[100];
-	char str[100];
-	
-	s = buffer;
-	
-	SKIP_SPACE
-	READ_STR(str)
-	if (strcmp(str, "machine")) {
-		printf("needs to start with the machines\n");
-		exit(1);
-	}
-	SKIP_SPACE
-	if (*s != ':') {
-		printf("needs : after the machine label\n");
-		exit(1);
-	}
-	s++;
-	
-	while (*s) {
-		READ_STR(str)
-	}
-}
-
 static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {
 	char tok[32], *p;
@@ -168,9 +135,91 @@ static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 	return i;
 }
 
+/*
+	machine file format:
+	
+	number_of_machines
+	(machine_name[i] arities_mem_hierarchy)*
+	(i arity (j latency)*)*
+*/
+
+static void parse_machines (char *buffer, uint32_t blen)
+{
+	char *s, *p;
+	char NUMBER[100];
+	char str[100];
+	char arities_str[100];
+	machine_t *m;
+	uint32_t arities[50];
+	int i;
+	
+	s = buffer;
+	
+	SKIP_SPACE
+	READ_STR(str)
+	if (strcmp(str, "machines")) {
+		printf("needs to start with the machines\n");
+		exit(1);
+	}
+	SKIP_SPACE
+	if (*s != ':') {
+		printf("needs : after the machine label\n");
+		exit(1);
+	}
+	INCS
+	SKIP_SPACE
+	SKIP_NEWLINE
+	
+	while (*s) {
+		int check_links = 0;
+		
+		READ_STR(str)
+		if (*s == ':')
+			check_links = 1;
+		else {
+			FORCE_SKIP_SPACE
+		}
+		if (*s == ':')
+			check_links = 1;
+		if (check_links && !strcmp(str, "links")) {
+			INCS
+			break;
+		}
+
+		nmachines++;
+		machines = (machine_t*)realloc(machines, nmachines*sizeof(machine_t));
+		assert(machines != NULL);
+		m = &machines[nmachines-1];
+		strcpy(m->name, str);
+
+		p = arities_str;
+		while (isdigit(*s) || *s == ',') {
+			*p = *s;
+			p++;
+			INCS
+		}
+		*p = 0;
+
+		m->topology.n_levels = to_vector(arities_str, arities, 50);
+		m->topology.arities = malloc(sizeof(uint32_t) * m->topology.n_levels);
+		assert(m->topology.arities != NULL);
+		memcpy(m->topology.arities, arities, sizeof(uint32_t) * m->topology.n_levels);
+		
+		printf("machine %s: nlevels %i arities ", m->name, m->topology.n_levels);
+		
+		for (i=0; i<m->topology.n_levels; i++)
+			printf("%u,", m->topology.arities[i]);
+		
+		printf("\n");
+		
+		SKIP_SPACE
+		SKIP_NEWLINE
+	}
+exit(0);
+}
+
 int main(int argc, char **argv)
 {
-	uint32_t arities[50];
 	static comm_matrix_t m;
 	uint32_t i, j, nt, fsize;
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
@@ -185,8 +234,10 @@ int main(int argc, char **argv)
 	uint32_t *pus = NULL;
 	static uint32_t map[MAX_THREADS];
 	
+	uint32_t arities[50];
+	
 	if (argc != 3) {
-		printf("Usage: %s <csv file> <arities>\nImportant: arities start from the root node\n", argv[0]);
+		printf("Usage: %s <csv file> <machine file>\n", argv[0]);
 		return 1;
 	}
 
@@ -207,8 +258,20 @@ int main(int argc, char **argv)
 	free(buffer);
 
 	LM_ASSERT(nt <= MAX_THREADS)
+	
+	fp = fopen(argv[2], "r");
+	assert(fp != NULL);
+	fseek(fp, 0, SEEK_END);
+	fsize = ftell(fp);
+	buffer = (char*)malloc(fsize+1);
+	assert(buffer != NULL);
+	rewind(fp);
+	assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+	fclose(fp);
+	buffer[fsize] = 0;
 
-	nlevels = to_vector(argv[2], arities, 50);
+	parse_machines(buffer, fsize);
+	free(buffer);
 
 	libmapping_get_n_pus_fake_topology(arities, nlevels, &npus, &nvertices);
 	printf("Hardware topology with %u levels, %u PUs and %u vertices\n", nlevels, npus, nvertices);

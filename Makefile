@@ -24,4 +24,4 @@ eagermap: $(objfiles)
 	gcc -o $@ $(objfiles) $(CFLAGS) $(LDFLAGS)
 
 clean:
-	rm -f *.o eagermap
+	rm -f *.o eagermap maptool
