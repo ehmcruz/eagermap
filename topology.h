@@ -26,9 +26,19 @@ typedef struct topology_t {
 	uint32_t *dist_pus_;
 } topology_t;
 
+struct machine_t;
+
+typedef struct machine_link_t {
+	int64_t weight;
+	struct machine_t *machine;
+} machine_link_t;
+
 typedef struct machine_t {
 	char name[256];
 	topology_t topology;
+	int id;
+	machine_link_t *links;
+	int nlinks;
 } machine_t;
 
 void libmapping_topology_init (void);

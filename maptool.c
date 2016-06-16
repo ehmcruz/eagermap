@@ -151,7 +151,8 @@ static void parse_machines (char *buffer, uint32_t blen)
 	char arities_str[100];
 	machine_t *m;
 	uint32_t arities[50];
-	int i;
+	int i, id;
+	int check_links;
 	
 	s = buffer;
 	
@@ -170,8 +171,16 @@ static void parse_machines (char *buffer, uint32_t blen)
 	SKIP_SPACE
 	SKIP_NEWLINE
 	
+	id = 0;
+	
 	while (*s) {
-		int check_links = 0;
+		check_links = 0;
+		
+		SKIP_SPACE
+		if (*s == "\n") {
+			INCS
+			continue;
+		}
 		
 		READ_STR(str)
 		if (*s == ':')
@@ -183,6 +192,8 @@ static void parse_machines (char *buffer, uint32_t blen)
 			check_links = 1;
 		if (check_links && !strcmp(str, "links")) {
 			INCS
+			SKIP_SPACE
+			SKIP_NEWLINE
 			break;
 		}
 
@@ -199,6 +210,8 @@ static void parse_machines (char *buffer, uint32_t blen)
 			INCS
 		}
 		*p = 0;
+		
+		m->id = id++;
 
 		m->topology.n_levels = to_vector(arities_str, arities, 50);
 		m->topology.arities = malloc(sizeof(uint32_t) * m->topology.n_levels);
@@ -214,6 +227,16 @@ static void parse_machines (char *buffer, uint32_t blen)
 		
 		SKIP_SPACE
 		SKIP_NEWLINE
+	}
+	
+	while (*s) {
+		SKIP_SPACE
+		if (*s == "\n") {
+			INCS
+			continue;
+		}
+		
+		READ_STR(str)
 	}
 exit(0);
 }
