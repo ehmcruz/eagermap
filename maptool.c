@@ -11,6 +11,18 @@
 machine_t *machines = NULL;
 int nmachines = 0;
 
+machine_t* get_machine_by_name (char *name)
+{
+	int i;
+	
+	for (i=0; i<nmachines; i++) {
+		if (!strcmp(machines[i].name, name))
+			return &machines[i];
+	}
+	
+	return NULL;
+}
+
 #define PRINTF_UINT64  "%" PRIu64
 
 #define INCS \
@@ -149,10 +161,11 @@ static void parse_machines (char *buffer, uint32_t blen)
 	char NUMBER[100];
 	char str[100];
 	char arities_str[100];
-	machine_t *m;
+	machine_t *m, *m2;
 	uint32_t arities[50];
-	int i, id;
+	int i;
 	int check_links;
+	uint64_t v;
 	
 	s = buffer;
 	
@@ -171,7 +184,7 @@ static void parse_machines (char *buffer, uint32_t blen)
 	SKIP_SPACE
 	SKIP_NEWLINE
 	
-	id = 0;
+	nmachines = 0;
 	
 	while (*s) {
 		check_links = 0;
@@ -211,7 +224,7 @@ static void parse_machines (char *buffer, uint32_t blen)
 		}
 		*p = 0;
 		
-		m->id = id++;
+		m->id = nmachines - 1;
 
 		m->topology.n_levels = to_vector(arities_str, arities, 50);
 		m->topology.arities = malloc(sizeof(uint32_t) * m->topology.n_levels);
@@ -237,6 +250,26 @@ static void parse_machines (char *buffer, uint32_t blen)
 		}
 		
 		READ_STR(str)
+		m = get_machine_by_name(str);
+		assert(m != NULL);
+		
+		SKIP_SPACE
+		
+		READ_STR(str)
+		m2 = get_machine_by_name(str);
+		assert(m2 != NULL);
+		
+		SKIP_SPACE
+		
+		READ_INT(v)
+		
+		printf("link %s <---> %s (%llu)\n", m->name, m2->name, v);
+		
+		SKIP_SPACE
+		
+		if (*s) {
+			SKIP_NEWLINE
+		}
 	}
 exit(0);
 }
