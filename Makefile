@@ -1,6 +1,4 @@
-CC=gcc
-CPP=g++
-AR=ar
+CC?=gcc
 CFLAGS=-O2 -g -Wall
 LDFLAGS=
 
@@ -21,7 +19,7 @@ objfiles=$(patsubst %.c,%.o,$(csrcfiles))
 all: eagermap
 
 eagermap: $(objfiles)
-	gcc -o $@ $(objfiles) $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ $(objfiles) $(CFLAGS) $(LDFLAGS)
 
 clean:
 	rm -f *.o eagermap
