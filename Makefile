@@ -1,4 +1,3 @@
-CC?=gcc
 CFLAGS=-O2 -g -Wall
 LDFLAGS=
 
