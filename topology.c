@@ -19,7 +19,7 @@ static void floyd_warshall (topology_t *t)
 	dist_dim_log = libmapping_get_log2(dist_dim);
 	t->dist_pus_dim = libmapping_get_next_power_of_two(t->pu_number);
 	t->dist_pus_dim_log = libmapping_get_log2(t->dist_pus_dim);
-printf("t->graph.n_vertices %i\ndist_dim %i\n", t->graph.n_vertices, dist_dim);
+/*printf("t->graph.n_vertices %i\ndist_dim %i\n", t->graph.n_vertices, dist_dim);*/
 	dist_ = (uint32_t*)lm_calloc(dist_dim*dist_dim, sizeof(uint32_t));
 	t->dist_pus_ = (uint32_t*)lm_calloc(t->dist_pus_dim*t->dist_pus_dim, sizeof(uint32_t));
 
@@ -104,6 +104,9 @@ void libmapping_get_n_pus_fake_topology (uint32_t *arities, uint32_t nlevels, ui
 	}
 }
 
+static uint32_t pu_id = 0;
+static uint32_t node_id = 0;
+
 static vertex_t* create_fake_topology (topology_t *topology, uint32_t level, uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights, uint32_t numa_node)
 {
 	int j;
@@ -113,19 +116,17 @@ static vertex_t* create_fake_topology (topology_t *topology, uint32_t level, uin
 	v = libmapping_get_free_vertex(&topology->graph);
 
 	if (nlevels == 0) {
-		static uint32_t id = 0;
 		v->type = GRAPH_ELTYPE_PU;
 		if (pus != NULL)
-			v->id = pus[id];
+			v->id = pus[pu_id];
 		else
-			v->id = id;
-		id++;
+			v->id = pu_id;
+		pu_id++;
 	}
 	else {
 		if (numa_node && level == 1) {
-			static uint32_t id = 0;
 			v->type = GRAPH_ELTYPE_NUMA_NODE;
-			v->id = id++;
+			v->id = node_id++;
 		}
 		else {
 			v->type = GRAPH_ELTYPE_UNDEFINED;
@@ -147,6 +148,8 @@ static vertex_t* create_fake_topology (topology_t *topology, uint32_t level, uin
 
 vertex_t* libmapping_create_fake_topology(topology_t *topology, uint32_t *arities, uint32_t nlevels, uint32_t *pus, weight_t *weights)
 {
+	pu_id = 0;
+	node_id = 0;
 	return create_fake_topology(topology, 0, arities, nlevels, pus, weights, 0);
 }
 
@@ -364,7 +367,7 @@ static void topology_analysis_ (topology_t *t, topology_t *orig)
 		}
 
 		t->pus_to_numa_node = (uint32_t*)lm_calloc(t->pu_number, sizeof(uint32_t));
-
+/*printf("t->pu_number %i t->n_numa_nodes %i t->n_pus_per_numa_node %i t->n_levels %i\n", t->pu_number, t->n_numa_nodes, t->n_pus_per_numa_node, t->n_levels);*/
 		for (i=0; i<t->pu_number; i++)
 			t->pus_to_numa_node[i] = 0xFFFFFFFF;
 

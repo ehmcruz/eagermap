@@ -327,6 +327,8 @@ int main(int argc, char **argv)
 	for (i=0; i<nmachines; i++) {
 		machine = &machines[i];
 		
+		npus = 0;
+		nvertices = 0;
 		libmapping_get_n_pus_fake_topology(machine->topology.arities, machine->topology.n_levels, &npus, &nvertices);
 		printf("Hardware topology with %u levels, %u PUs and %u vertices\n", machine->topology.n_levels, npus, nvertices);
 
