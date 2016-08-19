@@ -20,7 +20,7 @@ max=$((${#lines[@]} - 1))
 #	echo "--> ${lines[$i]}"
 #done
 
-echo -n "arities:"
+#echo -n "arities:"
 
 bef=${lines[0]}
 for i in `seq 1 1 $max`
@@ -35,8 +35,6 @@ do
 	bef=${lines[$i]}
 done
 
-echo ""
-
 PULIST=$(hwloc-ls -p --no-io --no-caches --merge --of console | grep PU | sed s,[A-Z#\ ],,g | tr '\n    ' ',' | sed s,.$,,)
 
-echo "PUs: $PULIST"
+echo " $PULIST"

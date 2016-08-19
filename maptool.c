@@ -271,7 +271,6 @@ static void parse_machines (char *buffer, uint32_t blen)
 			SKIP_NEWLINE
 		}
 	}
-exit(0);
 }
 
 int main(int argc, char **argv)
@@ -286,18 +285,14 @@ int main(int argc, char **argv)
 	double elapsed;
 	double quality;
 	thread_map_alg_map_t mapdata;
-	topology_t topo_, *topology;
 	uint32_t *pus = NULL;
+	machine_t *machine;
 	static uint32_t map[MAX_THREADS];
-	
-	uint32_t arities[50];
-	
+		
 	if (argc != 3) {
 		printf("Usage: %s <csv file> <machine file>\n", argv[0]);
 		return 1;
 	}
-
-	topology = &topo_;
 
 	fp = fopen(argv[1], "r");
 	assert(fp != NULL);
@@ -328,83 +323,24 @@ int main(int argc, char **argv)
 
 	parse_machines(buffer, fsize);
 	free(buffer);
+	
+	for (i=0; i<nmachines; i++) {
+		machine = &machines[i];
+		
+		libmapping_get_n_pus_fake_topology(machine->topology.arities, machine->topology.n_levels, &npus, &nvertices);
+		printf("Hardware topology with %u levels, %u PUs and %u vertices\n", machine->topology.n_levels, npus, nvertices);
 
-	libmapping_get_n_pus_fake_topology(arities, nlevels, &npus, &nvertices);
-	printf("Hardware topology with %u levels, %u PUs and %u vertices\n", nlevels, npus, nvertices);
-
-	weights = NULL;
+		weights = NULL;
 	
-	topology->pu_number = npus;
-	libmapping_graph_init(&topology->graph, nvertices, nvertices-1);
-	topology->root = libmapping_create_fake_topology(topology, arities, nlevels, pus, weights);
-	topology->root->weight = 0;
-	topology->root->type = GRAPH_ELTYPE_ROOT;
+		machine->topology.pu_number = npus;
+		libmapping_graph_init(&machine->topology.graph, nvertices, nvertices-1);
+		machine->topology.root = libmapping_create_fake_topology(&machine->topology, machine->topology.arities, machine->topology.n_levels, pus, weights);
+		machine->topology.root->weight = 0;
+		machine->topology.root->type = GRAPH_ELTYPE_ROOT;
 	
-	libmapping_topology_analysis(topology);
-	
-	threads_per_pu = (uint32_t*)malloc(topology->pu_number);
-	LM_ASSERT(threads_per_pu != NULL)
-	
-/*	for (i=0; i<MAX_THREADS; i++) {*/
-/*		libmapping_threads[i].stat = THREAD_DEAD;*/
-/*	#ifdef LIBMAPPING_STATS_THREAD_LOAD*/
-/*		libmapping_threads[i].time_start = 0;*/
-/*		libmapping_threads[i].time_end = 1;*/
-/*		libmapping_threads[i].time_running = 1;*/
-/*	#endif*/
-/*		libmapping_alive_threads[i] = &libmapping_threads[i];*/
-/*	}*/
-
-{
-	thread_map_alg_init_t init;
-	init.topology = topology;
-	libmapping_mapping_algorithm_greedy_init(&init);
-}
-
-	mapdata.m_init = &m;
-	mapdata.map = map;
-	
-	gettimeofday(&timer_begin, NULL);
-	libmapping_mapping_algorithm_greedy_map(&mapdata);
-	gettimeofday(&timer_end, NULL);
-	
-	for (i=0; i<topology->pu_number; i++) {
-		threads_per_pu[i] = 0;
+		libmapping_topology_analysis(&machine->topology);
+/*exit(1);*/
 	}
-	for (i=0; i<nt; i++) {
-		threads_per_pu[ map[i] ]++;
-	}
-	
-	quality = 0.0;
-	for (i=0; i<nt-1; i++) {
-		for (j=i+1; j<nt; j++) {
-/*			printf("el=%u, map[i]=%u, map[j]=%u, dist %u\n", comm_matrix_el(m, i, j), map[i], map[j], libmapping_topology_dist_pus(topology, map[i], map[j]));*/
-			quality += comm_matrix_el(m, i, j) / (libmapping_topology_dist_pus(topology, map[i], map[j]) + 1.0);
-		}
-	}
-
-	elapsed = timer_end.tv_sec - timer_begin.tv_sec + (timer_end.tv_usec - timer_begin.tv_usec) / 1000000.0;
-
-	printf("Number of tasks in communication matrix: %u\n", nt);
-
-	printf("Tasks per PU: ");
-	for (i=0; i<topology->pu_number; i++){
-		printf("%d", threads_per_pu[i]);
-		if (i!=topology->pu_number-1)
-			printf(",");
-	}
-	printf("\n");
-
-	printf("Execution time of the algorithm: %.4fms\n", elapsed*1000.0);
-	printf("Mapping quality (higher is better): %.4f\n", quality);
-
-	printf("Mapping: ");
-	for (i=0; i<nt; i++){
-		printf("%d", map[i]);
-		if (i < (nt-1))
-			printf(",");
-	}
-	printf("\n");
 	
 	return 0;
 }

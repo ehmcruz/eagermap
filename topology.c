@@ -19,7 +19,7 @@ static void floyd_warshall (topology_t *t)
 	dist_dim_log = libmapping_get_log2(dist_dim);
 	t->dist_pus_dim = libmapping_get_next_power_of_two(t->pu_number);
 	t->dist_pus_dim_log = libmapping_get_log2(t->dist_pus_dim);
-
+printf("t->graph.n_vertices %i\ndist_dim %i\n", t->graph.n_vertices, dist_dim);
 	dist_ = (uint32_t*)lm_calloc(dist_dim*dist_dim, sizeof(uint32_t));
 	t->dist_pus_ = (uint32_t*)lm_calloc(t->dist_pus_dim*t->dist_pus_dim, sizeof(uint32_t));
 
