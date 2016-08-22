@@ -20,7 +20,7 @@ static comm_matrix_t matrix_[2];
 static topology_t *hardware_topology;
 static uint32_t winners[MAX_THREADS], chosen[MAX_THREADS];
 
-void generate_group(comm_matrix_t *m, uint32_t total_elements, uint32_t group_elements, thread_group_t *group, uint32_t level, uint32_t *chosen)
+static void generate_group(comm_matrix_t *m, uint32_t total_elements, uint32_t group_elements, thread_group_t *group, uint32_t level, uint32_t *chosen)
 {
 	weight_t w, wmax;
 	uint32_t winner = 0;
@@ -47,7 +47,7 @@ void generate_group(comm_matrix_t *m, uint32_t total_elements, uint32_t group_el
 	}
 }
 
-uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t level)
+static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t level)
 {
 	uint32_t el_per_group, done, leftover, ngroups, avl_groups, group_i, in_group, i;
 	thread_group_t *group;
@@ -81,7 +81,7 @@ uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t level)
 	return ngroups;
 }
 
-void map_groups_to_topology_ (vertex_t *v, vertex_t *from, thread_group_t *g, uint32_t *map, uint32_t level)
+static void map_groups_to_topology_ (vertex_t *v, vertex_t *from, thread_group_t *g, uint32_t *map, uint32_t level)
 {
 	uint32_t i;
 
@@ -111,12 +111,12 @@ void map_groups_to_topology_ (vertex_t *v, vertex_t *from, thread_group_t *g, ui
 	}
 }
 
-void map_groups_to_topology (topology_t *t, thread_group_t *g, uint32_t *map)
+static void map_groups_to_topology (topology_t *t, thread_group_t *g, uint32_t *map)
 {
 	map_groups_to_topology_(t->root, NULL, g, map, 0);
 }
 
-void recreate_matrix (comm_matrix_t *old, thread_group_t *group_set, uint32_t ngroups, comm_matrix_t *m)
+static void recreate_matrix (comm_matrix_t *old, thread_group_t *group_set, uint32_t ngroups, comm_matrix_t *m)
 {
 	uint32_t i, j, k, z;
 	weight_t w;
@@ -137,7 +137,7 @@ void recreate_matrix (comm_matrix_t *old, thread_group_t *group_set, uint32_t ng
 	}
 }
 
-int detect_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_vertex, edge_t *edge, uint32_t level)
+static int detect_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_vertex, edge_t *edge, uint32_t level)
 {
 	if ((v->type == GRAPH_ELTYPE_ROOT && v->arity >= 2) || v->arity > 2) // is shared level
 		levels_n++;
@@ -147,7 +147,7 @@ int detect_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_verte
 		return 1;
 }
 
-int detect_arity_of_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_vertex, edge_t *edge, uint32_t level)
+static int detect_arity_of_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_vertex, edge_t *edge, uint32_t level)
 {
 	uint32_t *pos = (uint32_t*)data;
 

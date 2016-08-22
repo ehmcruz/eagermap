@@ -25,4 +25,6 @@ void* libmapping_mapping_algorithm_setup(topology_t *topology, char *alg);
 #include "mapping-algorithms-list.h"
 #undef LM_TMAP
 
+void network_generate_groups(comm_matrix_t *m, uint32_t ntasks, machine_t *machines, uint32_t nmachines);
+
 #endif

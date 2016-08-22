@@ -44,6 +44,8 @@ void set_matrix(struct spcd_comm_matrix *m, int i, int j, uint64_t v)
 
 #define comm_matrix_el(m, row, col) get_matrix(&(m), row, col)
 #define comm_matrix_ptr_el(m, row, col) get_matrix(m, row, col)
+
+#define comm_matrix_write(m, row, col, v) set_matrix(&(m), row, col, v)
 #define comm_matrix_ptr_write(m, row, col, v) set_matrix(m, row, col, v)
 
 

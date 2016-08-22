@@ -276,6 +276,7 @@ static void parse_machines (char *buffer, uint32_t blen)
 int main(int argc, char **argv)
 {
 	static comm_matrix_t m;
+
 	uint32_t i, j, nt, fsize;
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
@@ -287,7 +288,7 @@ int main(int argc, char **argv)
 	thread_map_alg_map_t mapdata;
 	uint32_t *pus = NULL;
 	machine_t *machine;
-	static uint32_t map[MAX_THREADS];
+	thread_map_alg_init_t init;
 		
 	if (argc != 3) {
 		printf("Usage: %s <csv file> <machine file>\n", argv[0]);
@@ -324,13 +325,14 @@ int main(int argc, char **argv)
 	parse_machines(buffer, fsize);
 	free(buffer);
 	
+	printf("Number of threads: %i\n", nt);
+	
 	for (i=0; i<nmachines; i++) {
 		machine = &machines[i];
 		
 		npus = 0;
 		nvertices = 0;
 		libmapping_get_n_pus_fake_topology(machine->topology.arities, machine->topology.n_levels, &npus, &nvertices);
-		printf("Hardware topology with %u levels, %u PUs and %u vertices\n", machine->topology.n_levels, npus, nvertices);
 
 		weights = NULL;
 	
@@ -341,8 +343,37 @@ int main(int argc, char **argv)
 		machine->topology.root->type = GRAPH_ELTYPE_ROOT;
 	
 		libmapping_topology_analysis(&machine->topology);
+
+		printf("Hardware topology with %u levels, %u PUs and %u vertices\n", machine->topology.n_levels, machine->topology.pu_number, nvertices);
 /*exit(1);*/
 	}
+/*nt=128;*/
+	gettimeofday(&timer_begin, NULL);
+
+	network_generate_groups(&m, nt, machines, nmachines);
+
+	for (i=0; i<nmachines; i++) {
+		printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
+		
+		for (j=0; j<machines[i].ntasks; j++) {
+			printf("%i,", machines[i].tasks[j]);
+		}
+		
+		printf("\n");
+	}
+	
+	for (i=0; i<nmachines; i++) {
+		init.topology = &machines[i].topology;
+		libmapping_mapping_algorithm_greedy_init(&init);
+
+		mapdata.m_init = &machines[i].cm;
+		mapdata.map = machines[i].map;
+	
+		libmapping_mapping_algorithm_greedy_map(&mapdata);
+	}
+
+	gettimeofday(&timer_end, NULL);
+
 	
 	return 0;
 }

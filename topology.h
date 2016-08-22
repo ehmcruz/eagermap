@@ -39,6 +39,10 @@ typedef struct machine_t {
 	int id;
 	machine_link_t *links;
 	int nlinks;
+	comm_matrix_t cm;
+	int ntasks;
+	uint32_t tasks[MAX_THREADS];
+	uint32_t map[MAX_THREADS];
 } machine_t;
 
 void libmapping_topology_init (void);
