@@ -43,6 +43,8 @@ typedef struct machine_t {
 	int ntasks;
 	uint32_t tasks[MAX_THREADS];
 	uint32_t map[MAX_THREADS];
+	uint32_t *best_pus;
+	uint32_t npus_check;
 } machine_t;
 
 void libmapping_topology_init (void);

@@ -1,0 +1,5 @@
+machines:
+viking2 2,4 0,1,2,3,4,5,6,7
+viking3 2,4 0,1,2,3,4,5,6,7
+links:
+viking2 viking2 10

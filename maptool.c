@@ -8,8 +8,13 @@
 
 #include "libmapping.h"
 
-machine_t *machines = NULL;
-int nmachines = 0;
+typedef struct map_t {
+	machine_t *machine;
+	uint32_t pu;
+} map_t;
+
+static machine_t *machines = NULL;
+static int nmachines = 0;
 
 machine_t* get_machine_by_name (char *name)
 {
@@ -160,13 +165,18 @@ static void parse_machines (char *buffer, uint32_t blen)
 	char *s, *p;
 	char NUMBER[100];
 	char str[100];
-	char arities_str[100];
+	char *arities_str, *pus_str;
 	machine_t *m, *m2;
 	uint32_t arities[50];
 	int i;
 	int check_links;
 	uint64_t v;
 	
+	arities_str = malloc(1024);
+	assert(arities_str != NULL);
+	pus_str = malloc(10*1024);
+	assert(pus_str != NULL);
+
 	s = buffer;
 	
 	SKIP_SPACE
@@ -231,7 +241,22 @@ static void parse_machines (char *buffer, uint32_t blen)
 		assert(m->topology.arities != NULL);
 		memcpy(m->topology.arities, arities, sizeof(uint32_t) * m->topology.n_levels);
 		
-		printf("machine %s: nlevels %i arities ", m->name, m->topology.n_levels);
+		FORCE_SKIP_SPACE
+		
+		p = pus_str;
+		while (isdigit(*s) || *s == ',') {
+			*p = *s;
+			p++;
+			INCS
+		}
+		*p = 0;
+		
+		m->best_pus = malloc(sizeof(uint32_t) * 1024);
+		assert(m->best_pus != NULL);
+		
+		m->npus_check = to_vector(pus_str, m->best_pus, 1024);
+		
+		printf("machine %s: nlevels %i npus_check %i arities ", m->name, m->topology.n_levels, m->npus_check);
 		
 		for (i=0; i<m->topology.n_levels; i++)
 			printf("%u,", m->topology.arities[i]);
@@ -271,6 +296,9 @@ static void parse_machines (char *buffer, uint32_t blen)
 			SKIP_NEWLINE
 		}
 	}
+	
+	free(arities_str);
+	free(pus_str);
 }
 
 int main(int argc, char **argv)
@@ -286,10 +314,10 @@ int main(int argc, char **argv)
 	double elapsed;
 	double quality;
 	thread_map_alg_map_t mapdata;
-	uint32_t *pus = NULL;
 	machine_t *machine;
 	thread_map_alg_init_t init;
-		
+	map_t *map;
+	
 	if (argc != 3) {
 		printf("Usage: %s <csv file> <machine file>\n", argv[0]);
 		return 1;
@@ -325,6 +353,9 @@ int main(int argc, char **argv)
 	parse_machines(buffer, fsize);
 	free(buffer);
 	
+	map = malloc(sizeof(map_t) * nt);
+	assert(map != NULL);
+	
 	printf("Number of threads: %i\n", nt);
 	
 	for (i=0; i<nmachines; i++) {
@@ -338,14 +369,20 @@ int main(int argc, char **argv)
 	
 		machine->topology.pu_number = npus;
 		libmapping_graph_init(&machine->topology.graph, nvertices, nvertices-1);
-		machine->topology.root = libmapping_create_fake_topology(&machine->topology, machine->topology.arities, machine->topology.n_levels, pus, weights);
+		machine->topology.root = libmapping_create_fake_topology(&machine->topology, machine->topology.arities, machine->topology.n_levels, machine->best_pus, weights);
 		machine->topology.root->weight = 0;
 		machine->topology.root->type = GRAPH_ELTYPE_ROOT;
 	
 		libmapping_topology_analysis(&machine->topology);
+		
+		assert(machine->npus_check == machine->topology.pu_number);
 
-		printf("Hardware topology with %u levels, %u PUs and %u vertices\n", machine->topology.n_levels, machine->topology.pu_number, nvertices);
+		printf("Hardware topology with %u levels, %u PUs and %u vertices, pus: ", machine->topology.n_levels, machine->topology.pu_number, nvertices);
 /*exit(1);*/
+
+		for (j=0; j<machine->topology.pu_number; j++)
+			printf("%i,", machine->topology.best_pus[j]);
+		printf("\n");
 	}
 /*nt=128;*/
 	gettimeofday(&timer_begin, NULL);
@@ -373,7 +410,25 @@ int main(int argc, char **argv)
 	}
 
 	gettimeofday(&timer_end, NULL);
-
+	
+	for (i=0; i<nt; i++)
+		map[i].machine = NULL;
+	
+	for (i=0; i<nmachines; i++) {
+		for (j=0; j<machines[i].ntasks; j++) {
+			assert(machines[i].tasks[j] < nt);
+			map[ machines[i].tasks[j] ].machine = &machines[i];
+			map[ machines[i].tasks[j] ].pu = machines[i].map[j];
+		}
+	}
+	
+	for (i=0; i<nt; i++) {
+		assert(map[i].machine != NULL);
+	}
+	
+	for (i=0; i<nt; i++) {
+		printf("rank %i=%s slot=%i\n", i, map[i].machine->name, map[i].pu);
+	}
 	
 	return 0;
 }
