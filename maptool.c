@@ -15,6 +15,7 @@ typedef struct map_t {
 
 static machine_t *machines = NULL;
 static int nmachines = 0;
+static int use_load;
 
 machine_t* get_machine_by_name (char *name)
 {
@@ -301,6 +302,29 @@ static void parse_machines (char *buffer, uint32_t blen)
 	free(pus_str);
 }
 
+static void parse_loads (char *buffer, uint32_t blen, int nt)
+{
+	int i;
+	char *s, *p;
+	char NUMBER[100];
+	
+	s = buffer;
+	
+	for (i=0; i<nt; i++) {
+		if (i > 0) {
+			FORCE_SKIP_SPACE
+			
+			p = NUMBER;
+			while (isdigit(*s) || *s == ',') {
+				*p = *s;
+				p++;
+				INCS
+			}
+			*p = 0;
+		}
+	}
+}
+
 int main(int argc, char **argv)
 {
 	static comm_matrix_t m;
@@ -318,10 +342,12 @@ int main(int argc, char **argv)
 	thread_map_alg_init_t init;
 	map_t *map;
 	
-	if (argc != 3) {
-		printf("Usage: %s <csv file> <machine file>\n", argv[0]);
+	if (argc != 3 && argc != 4) {
+		printf("Usage: %s csv_file machine_file [load_file]\n", argv[0]);
 		return 1;
 	}
+	
+	use_load = (argc == 4);
 
 	fp = fopen(argv[1], "r");
 	assert(fp != NULL);
@@ -352,6 +378,22 @@ int main(int argc, char **argv)
 
 	parse_machines(buffer, fsize);
 	free(buffer);
+	
+	if (use_load) {
+		fp = fopen(argv[3], "r");
+		assert(fp != NULL);
+		fseek(fp, 0, SEEK_END);
+		fsize = ftell(fp);
+		buffer = (char*)malloc(fsize+1);
+		assert(buffer != NULL);
+		rewind(fp);
+		assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+		fclose(fp);
+		buffer[fsize] = 0;
+
+		parse_loads(buffer, fsize, nt);
+		free(buffer);
+	}
 	
 	map = malloc(sizeof(map_t) * nt);
 	assert(map != NULL);

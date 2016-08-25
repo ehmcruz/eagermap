@@ -18,6 +18,8 @@
 #define lm_calloc(count, tsize) malloc((count) * (tsize))
 #define lm_free(p) free(p)
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
 
 struct spcd_comm_matrix {
 	uint64_t matrix[MAX_THREADS*MAX_THREADS];

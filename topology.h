@@ -41,6 +41,7 @@ typedef struct machine_t {
 	int nlinks;
 	comm_matrix_t cm;
 	int ntasks;
+	double load;
 	uint32_t tasks[MAX_THREADS];
 	uint32_t map[MAX_THREADS];
 	uint32_t *best_pus;
