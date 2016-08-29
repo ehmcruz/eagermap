@@ -39,22 +39,23 @@ typedef struct machine_t {
 	int id;
 	machine_link_t *links;
 	int nlinks;
-	comm_matrix_t cm;
-	int ntasks;
-	double load;
-	uint32_t tasks[MAX_THREADS];
 	uint32_t map[MAX_THREADS];
 	uint32_t *best_pus;
 	uint32_t npus_check;
+
+	comm_matrix_t *cm;
+	int ntasks;
+	double load;
+	uint32_t *tasks;
 } machine_t;
 
 typedef struct machine_task_group_t {
 	int id;
+	uint32_t npus;
 	comm_matrix_t cm;
 	int ntasks;
 	double load;
 	uint32_t tasks[MAX_THREADS];
-	uint32_t npus;
 } machine_task_group_t;
 
 void libmapping_topology_init (void);

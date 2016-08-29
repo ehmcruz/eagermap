@@ -14,6 +14,7 @@ typedef struct map_t {
 } map_t;
 
 static machine_t *machines = NULL;
+static machine_task_group_t *groups;
 static int nmachines = 0;
 static int use_load;
 static double *loads = NULL;
@@ -435,6 +436,9 @@ int main(int argc, char **argv)
 		free(buffer);
 	}
 	
+	groups = malloc(nmachines * sizeof(machine_task_group_t));
+	assert(groups != NULL);
+	
 	map = malloc(sizeof(map_t) * nt);
 	assert(map != NULL);
 	
@@ -465,12 +469,17 @@ int main(int argc, char **argv)
 		for (j=0; j<machine->topology.pu_number; j++)
 			printf("%i,", machine->topology.best_pus[j]);
 		printf("\n");
+		
+		groups[i].id = i;
+		groups[i].npus = machine->topology.pu_number;
 	}
 /*nt=128;*/
 	gettimeofday(&timer_begin, NULL);
 
 	if (!use_load) {
-		network_generate_groups(&m, nt, machines, nmachines);
+		network_generate_groups(&m, nt, groups, nmachines);
+		
+		network_map_groups_to_machines(groups, machines, nmachines);
 
 		for (i=0; i<nmachines; i++) {
 			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
@@ -486,34 +495,34 @@ int main(int argc, char **argv)
 			init.topology = &machines[i].topology;
 			libmapping_mapping_algorithm_greedy_init(&init);
 
-			mapdata.m_init = &machines[i].cm;
+			mapdata.m_init = machines[i].cm;
 			mapdata.map = machines[i].map;
 	
 			libmapping_mapping_algorithm_greedy_map(&mapdata);
 		}
 	}
 	else {
-		network_generate_groups_load(&m, nt, machines, nmachines, loads);
+/*		network_generate_groups_load(&m, nt, machines, nmachines, loads);*/
 
-		for (i=0; i<nmachines; i++) {
-			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
-		
-			for (j=0; j<machines[i].ntasks; j++) {
-				printf("%i,", machines[i].tasks[j]);
-			}
-		
-			printf("\n");
-		}
-	
-		for (i=0; i<nmachines; i++) {
-			init.topology = &machines[i].topology;
-			libmapping_mapping_algorithm_greedy_init(&init);
+/*		for (i=0; i<nmachines; i++) {*/
+/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
+/*		*/
+/*			for (j=0; j<machines[i].ntasks; j++) {*/
+/*				printf("%i,", machines[i].tasks[j]);*/
+/*			}*/
+/*		*/
+/*			printf("\n");*/
+/*		}*/
+/*	*/
+/*		for (i=0; i<nmachines; i++) {*/
+/*			init.topology = &machines[i].topology;*/
+/*			libmapping_mapping_algorithm_greedy_init(&init);*/
 
-			mapdata.m_init = &machines[i].cm;
-			mapdata.map = machines[i].map;
-	
-			libmapping_mapping_algorithm_greedy_map(&mapdata);
-		}
+/*			mapdata.m_init = &machines[i].cm;*/
+/*			mapdata.map = machines[i].map;*/
+/*	*/
+/*			libmapping_mapping_algorithm_greedy_map(&mapdata);*/
+/*		}*/
 	}
 
 	gettimeofday(&timer_end, NULL);
