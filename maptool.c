@@ -16,6 +16,7 @@ typedef struct map_t {
 static machine_t *machines = NULL;
 static int nmachines = 0;
 static int use_load;
+static double *loads = NULL;
 
 machine_t* get_machine_by_name (char *name)
 {
@@ -76,10 +77,19 @@ machine_t* get_machine_by_name (char *name)
 
 #define FORCE_SKIP_SPACE \
 	if (!(*s == ' ' || *s == '\t')) {\
-		printf("require space\n");\
+		printf("require space (given hex 0x%X)\n", (unsigned)*s);\
 		assert(0);\
 	}\
 	SKIP_SPACE
+
+#define FORCE_SKIP_SPACE_NEWLINE \
+	if (!(*s == ' ' || *s == '\t' || *s == '\n')) {\
+		printf("require space (given hex 0x%X)\n", (unsigned)*s);\
+		assert(0);\
+	}\
+	while (*s == ' ' || *s == '\t' || *s == '\n') {\
+		INCS\
+	}
 
 #define SKIP_NEWLINE \
 	assert(*s == '\n');\
@@ -308,19 +318,49 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 	char *s, *p;
 	char NUMBER[100];
 	
+	loads = malloc(nt * sizeof(double));
+	assert(loads != NULL);
+	
+	printf("parsing load...\n");
+	
 	s = buffer;
 	
 	for (i=0; i<nt; i++) {
-		if (i > 0) {
-			FORCE_SKIP_SPACE
+		if (!isdigit(*s)) {
+			printf("only numbers are allowed in the load file\n");
+			exit(1);
+		}
+
+		p = NUMBER;
+		
+		while (isdigit(*s)) {
+			*p = *s;
+			p++;
+			INCS
+		}
+		if (*s == '.') {
+			*p = *s;
+			p++;
+			INCS
 			
-			p = NUMBER;
-			while (isdigit(*s) || *s == ',') {
+			while (isdigit(*s)) {
 				*p = *s;
 				p++;
 				INCS
 			}
-			*p = 0;
+		}
+		*p = 0;
+		loads[i] = atof(NUMBER);
+		printf("load %i %f\n", i, loads[i]);
+		
+		if (i < (nt-1)) {
+			FORCE_SKIP_SPACE_NEWLINE
+			
+			if (*s == 0) {
+				printf("we need %i loads in the load file (given %i)\n", nt, i+1);
+				exit(1);
+			}
+
 		}
 	}
 }
@@ -429,26 +469,51 @@ int main(int argc, char **argv)
 /*nt=128;*/
 	gettimeofday(&timer_begin, NULL);
 
-	network_generate_groups(&m, nt, machines, nmachines);
+	if (!use_load) {
+		network_generate_groups(&m, nt, machines, nmachines);
 
-	for (i=0; i<nmachines; i++) {
-		printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
+		for (i=0; i<nmachines; i++) {
+			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
 		
-		for (j=0; j<machines[i].ntasks; j++) {
-			printf("%i,", machines[i].tasks[j]);
+			for (j=0; j<machines[i].ntasks; j++) {
+				printf("%i,", machines[i].tasks[j]);
+			}
+		
+			printf("\n");
 		}
-		
-		printf("\n");
-	}
 	
-	for (i=0; i<nmachines; i++) {
-		init.topology = &machines[i].topology;
-		libmapping_mapping_algorithm_greedy_init(&init);
+		for (i=0; i<nmachines; i++) {
+			init.topology = &machines[i].topology;
+			libmapping_mapping_algorithm_greedy_init(&init);
 
-		mapdata.m_init = &machines[i].cm;
-		mapdata.map = machines[i].map;
+			mapdata.m_init = &machines[i].cm;
+			mapdata.map = machines[i].map;
 	
-		libmapping_mapping_algorithm_greedy_map(&mapdata);
+			libmapping_mapping_algorithm_greedy_map(&mapdata);
+		}
+	}
+	else {
+		network_generate_groups_load(&m, nt, machines, nmachines, loads);
+
+		for (i=0; i<nmachines; i++) {
+			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
+		
+			for (j=0; j<machines[i].ntasks; j++) {
+				printf("%i,", machines[i].tasks[j]);
+			}
+		
+			printf("\n");
+		}
+	
+		for (i=0; i<nmachines; i++) {
+			init.topology = &machines[i].topology;
+			libmapping_mapping_algorithm_greedy_init(&init);
+
+			mapdata.m_init = &machines[i].cm;
+			mapdata.map = machines[i].map;
+	
+			libmapping_mapping_algorithm_greedy_map(&mapdata);
+		}
 	}
 
 	gettimeofday(&timer_end, NULL);

@@ -48,6 +48,15 @@ typedef struct machine_t {
 	uint32_t npus_check;
 } machine_t;
 
+typedef struct machine_task_group_t {
+	int id;
+	comm_matrix_t cm;
+	int ntasks;
+	double load;
+	uint32_t tasks[MAX_THREADS];
+	uint32_t npus;
+} machine_task_group_t;
+
 void libmapping_topology_init (void);
 void libmapping_topology_destroy (void);
 
