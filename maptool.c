@@ -180,7 +180,7 @@ static void parse_machines (char *buffer, uint32_t blen)
 	char *arities_str, *pus_str;
 	machine_t *m, *m2;
 	uint32_t arities[50];
-	int i;
+	int i, j;
 	int check_links;
 	uint64_t v;
 	
@@ -212,7 +212,7 @@ static void parse_machines (char *buffer, uint32_t blen)
 		check_links = 0;
 		
 		SKIP_SPACE
-		if (*s == "\n") {
+		if (*s == '\n') {
 			INCS
 			continue;
 		}
@@ -246,8 +246,6 @@ static void parse_machines (char *buffer, uint32_t blen)
 		}
 		*p = 0;
 		
-		m->id = nmachines - 1;
-
 		m->topology.n_levels = to_vector(arities_str, arities, 50);
 		m->topology.arities = malloc(sizeof(uint32_t) * m->topology.n_levels);
 		assert(m->topology.arities != NULL);
@@ -268,39 +266,75 @@ static void parse_machines (char *buffer, uint32_t blen)
 		
 		m->npus_check = to_vector(pus_str, m->best_pus, 1024);
 		
-		printf("machine %s: nlevels %i npus_check %i arities ", m->name, m->topology.n_levels, m->npus_check);
-		
-		for (i=0; i<m->topology.n_levels; i++)
-			printf("%u,", m->topology.arities[i]);
-		
-		printf("\n");
-		
 		SKIP_SPACE
 		SKIP_NEWLINE
 	}
 	
+	for (i=0; i<nmachines; i++) {
+		m = &machines[i];
+		
+		m->id = i;
+		m->links = NULL;
+		m->nlinks = 0;
+
+		printf("machine-%i %s: nlevels %i npus_check %i arities ", m->id, m->name, m->topology.n_levels, m->npus_check);
+		
+		for (j=0; j<m->topology.n_levels; j++)
+			printf("%u,", m->topology.arities[j]);
+		
+		printf(" pus ");
+		
+		for (j=0; j<m->npus_check; j++)
+			printf("%u,", m->best_pus[j]);
+		
+		printf("\n");
+
+	}
+	
 	while (*s) {
 		SKIP_SPACE
-		if (*s == "\n") {
+		if (*s == '\n') {
 			INCS
 			continue;
 		}
 		
 		READ_STR(str)
 		m = get_machine_by_name(str);
-		assert(m != NULL);
+
+		if (m == NULL) {
+			printf("can't find machine %s\n", str);
+			exit(1);
+		}
 		
 		SKIP_SPACE
 		
 		READ_STR(str)
 		m2 = get_machine_by_name(str);
-		assert(m2 != NULL);
+		
+		if (m2 == NULL) {
+			printf("can't find machine %s\n", str);
+			exit(1);
+		}
 		
 		SKIP_SPACE
 		
 		READ_INT(v)
 		
 		printf("link %s <---> %s (%llu)\n", m->name, m2->name, v);
+		
+		m->links = (machine_link_t*)realloc(m->links, (m->nlinks+1)*sizeof(machine_link_t));
+		assert(m->links != NULL);
+		
+		for (i=0; i<m->nlinks; i++) {
+			if (m->links[i].machine == m2) {
+				printf("double link between machines %s and %s\n", m->name, m2->name);
+				exit(1);
+			}
+		}
+		
+		m->links[ m->nlinks ].machine = m2;
+		m->links[ m->nlinks ].weight = v;
+		m->nlinks++;
 		
 		SKIP_SPACE
 		
@@ -455,7 +489,7 @@ int main(int argc, char **argv)
 	
 		machine->topology.pu_number = npus;
 		libmapping_graph_init(&machine->topology.graph, nvertices, nvertices-1);
-		machine->topology.root = libmapping_create_fake_topology(&machine->topology, machine->topology.arities, machine->topology.n_levels, machine->best_pus, weights);
+		machine->topology.root = libmapping_create_fake_topology(&machine->topology, machine->topology.arities, machine->topology.n_levels, NULL, weights);
 		machine->topology.root->weight = 0;
 		machine->topology.root->type = GRAPH_ELTYPE_ROOT;
 	
@@ -474,6 +508,9 @@ int main(int argc, char **argv)
 		groups[i].npus = machine->topology.pu_number;
 	}
 /*nt=128;*/
+
+	network_floyd_warshall(machines, nmachines);
+	
 	gettimeofday(&timer_begin, NULL);
 
 	if (!use_load) {
@@ -536,7 +573,7 @@ int main(int argc, char **argv)
 		for (j=0; j<machines[i].ntasks; j++) {
 			assert(machines[i].tasks[j] < nt);
 			map[ machines[i].tasks[j] ].machine = &machines[i];
-			map[ machines[i].tasks[j] ].pu = machines[i].map[j];
+			map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
 		}
 	}
 	

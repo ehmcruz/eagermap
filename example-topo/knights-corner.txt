@@ -1,0 +1,12 @@
+machines:
+core0 4 0,1,2,3
+core1 4 4,5,6,7
+core2 4 8,9,10,11
+core3 4 12,13,14,15
+links:
+core0 core1 1
+core1 core0 1
+core2 core3 1
+core3 core2 1
+core1 core2 10
+core2 core1 10

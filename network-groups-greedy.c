@@ -2,6 +2,49 @@
 
 static char chosen[MAX_THREADS];
 
+uint32_t **network_distance_machines;
+
+#define dist(i,j) network_distance_machines[ (i) ][ (j) ]
+#define MAX_DIST ((UINT_MAX-10)/2)
+
+void network_floyd_warshall (machine_t *machines, uint32_t nmachines)
+{
+	uint32_t k, i, j;
+	
+	printf("UINT_MAX is %u\nMAX_DIST is %u\n", UINT_MAX, MAX_DIST);
+	
+	network_distance_machines = libmapping_matrix_malloc(nmachines, nmachines, sizeof(uint32_t));
+	
+	for (i=0; i<nmachines; i++) {
+		for (j=0; j<nmachines; j++)
+			network_distance_machines[i][j] = MAX_DIST;
+	}
+	
+	for (i=0; i<nmachines; i++) {
+		dist(i,i) = 0;
+		
+		for (j=0; j<machines[i].nlinks; j++)
+			dist(i, machines[i].links[j].machine->id ) = machines[i].links[j].weight;
+	}
+	
+	for (k=0; k<nmachines; k++) {
+		for (i=0; i<nmachines; i++) {
+			for (j=0; j<nmachines; j++) {
+				if (dist(i,j) > dist(i,k) + dist(k,j))
+					dist(i,j) = dist(i,k) + dist(k,j);
+			}
+		}
+	}
+	
+	printf("network distance matrix from floyd warshall\n");
+	for (i=0; i<nmachines; i++) {
+		for (j=0; j<nmachines; j++)
+			printf("%i,", (network_distance_machines[i][j] != MAX_DIST) ? network_distance_machines[i][j] : -1);
+		printf("\n");
+	}
+	printf("\n");
+}
+
 static void network_generate_group (comm_matrix_t *m, uint32_t ntasks, char *chosen, machine_task_group_t *group)
 {
 	weight_t w, wmax;
