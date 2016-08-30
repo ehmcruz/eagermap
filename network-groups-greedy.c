@@ -29,7 +29,7 @@ static void network_generate_group (comm_matrix_t *m, uint32_t ntasks, char *cho
 	}
 }
 
-static void network_create_comm_matrices (comm_matrix_t *m, machine_task_group_t *groups, uint32_t nmachines)
+void network_create_comm_matrices (comm_matrix_t *m, machine_task_group_t *groups, uint32_t nmachines)
 {
 	uint32_t i, j, k;
 	for (i=0; i<nmachines; i++) {
