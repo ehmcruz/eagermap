@@ -8,6 +8,7 @@ typedef struct thread_map_alg_init_t {
 typedef struct thread_map_alg_map_t {
 	// input
 	comm_matrix_t *m_init;
+	double *loads;
 
 	// output
 	uint32_t *map;

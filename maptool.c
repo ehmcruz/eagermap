@@ -477,6 +477,7 @@ int main(int argc, char **argv)
 	assert(map != NULL);
 	
 	printf("Number of threads: %i\n", nt);
+	printf("Number of machines: %i\n", nmachines);
 	
 	for (i=0; i<nmachines; i++) {
 		machine = &machines[i];
@@ -511,6 +512,19 @@ int main(int argc, char **argv)
 
 	network_floyd_warshall(machines, nmachines);
 	
+	if (!use_load) {
+		for (i=0; i<nmachines; i++) {
+			init.topology = &machines[i].topology;
+			libmapping_mapping_algorithm_greedy_init(&init);
+		}
+	}
+	else {
+		for (i=0; i<nmachines; i++) {
+			init.topology = &machines[i].topology;
+			libmapping_mapping_algorithm_greedy_lb_init(&init);
+		}
+	}
+	
 	gettimeofday(&timer_begin, NULL);
 
 	if (!use_load) {
@@ -529,9 +543,6 @@ int main(int argc, char **argv)
 		}
 	
 		for (i=0; i<nmachines; i++) {
-			init.topology = &machines[i].topology;
-			libmapping_mapping_algorithm_greedy_init(&init);
-
 			mapdata.m_init = machines[i].cm;
 			mapdata.map = machines[i].map;
 	
@@ -554,13 +565,11 @@ int main(int argc, char **argv)
 		}
 	
 		for (i=0; i<nmachines; i++) {
-			init.topology = &machines[i].topology;
-			libmapping_mapping_algorithm_greedy_init(&init);
-
 			mapdata.m_init = machines[i].cm;
 			mapdata.map = machines[i].map;
+			mapdata.loads = loads;
 	
-			libmapping_mapping_algorithm_greedy_map(&mapdata);
+			libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
 		}
 	}
 
