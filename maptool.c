@@ -8,6 +8,8 @@
 
 #include "libmapping.h"
 
+#define ENABLE_LOAD_BALANCE
+
 typedef struct map_t {
 	machine_t *machine;
 	uint32_t pu;
@@ -404,7 +406,7 @@ int main(int argc, char **argv)
 {
 	static comm_matrix_t m;
 
-	uint32_t i, j, nt, fsize;
+	uint32_t i, j, k, nt, fsize;
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
 	FILE *fp;
@@ -412,6 +414,7 @@ int main(int argc, char **argv)
 	struct timeval timer_begin, timer_end;
 	double elapsed;
 	double quality;
+	double machine_load, pu_load;
 	thread_map_alg_map_t mapdata;
 	machine_t *machine;
 	thread_map_alg_init_t init;
@@ -521,7 +524,11 @@ int main(int argc, char **argv)
 	else {
 		for (i=0; i<nmachines; i++) {
 			init.topology = &machines[i].topology;
+		#ifdef ENABLE_LOAD_BALANCE
 			libmapping_mapping_algorithm_greedy_lb_init(&init);
+		#else
+			libmapping_mapping_algorithm_greedy_init(&init);
+		#endif
 		}
 	}
 	
@@ -550,7 +557,11 @@ int main(int argc, char **argv)
 		}
 	}
 	else {
+	#ifdef ENABLE_LOAD_BALANCE
 		network_generate_groups_load(&m, nt, groups, nmachines, loads);
+	#else
+		network_generate_groups(&m, nt, groups, nmachines);
+	#endif
 		
 		network_map_groups_to_machines(groups, machines, nmachines);
 
@@ -569,7 +580,11 @@ int main(int argc, char **argv)
 			mapdata.map = machines[i].map;
 			mapdata.loads = loads;
 	
+		#ifdef ENABLE_LOAD_BALANCE
 			libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
+		#else
+			libmapping_mapping_algorithm_greedy_map(&mapdata);
+		#endif
 		}
 	}
 
@@ -588,6 +603,34 @@ int main(int argc, char **argv)
 	
 	for (i=0; i<nt; i++) {
 		assert(map[i].machine != NULL);
+	}
+	
+	if (use_load) {
+		printf("loads per machine:\n");
+	
+		for (i=0; i<nmachines; i++) {
+			machine_load = 0.0;
+			for (j=0; j<machines[i].ntasks; j++)
+				machine_load += loads[ machines[i].tasks[j] ];
+			printf("%s (%.3f): ", machines[i].name, machine_load);
+		
+/*			machine_load = 0.0;*/
+			for (j=0; j<machines[i].topology.pu_number; j++) {
+				pu_load = 0.0;
+			
+				for (k=0; k<machines[i].ntasks; k++) {
+					if (machines[i].map[k] == j)
+						pu_load += loads[ machines[i].tasks[k] ];
+				}
+			
+				printf("%.3f ", pu_load);
+			
+/*				machine_load += pu_load;*/
+			}
+		
+/*			printf("--> %.3f", machine_load);*/
+			printf("\n");
+		}
 	}
 	
 	for (i=0; i<nt; i++) {
