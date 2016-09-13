@@ -637,5 +637,15 @@ int main(int argc, char **argv)
 		printf("rank %i=%s slot=%i\n", i, map[i].machine->name, map[i].pu);
 	}
 	
+	printf("single machine mapping: ");
+	
+	for (i=0; i<nt; i++) {
+		printf("%i", map[i].pu);
+		if (i < (nt-1))
+			printf(",");
+	}
+	
+	printf("\n");
+	
 	return 0;
 }
