@@ -531,6 +531,12 @@ int main(int argc, char **argv)
 		#endif
 		}
 	}
+
+	for (i=0; i<nmachines; i++) {
+		for (j=0; j<MAX_THREADS; j++) {
+			machines[i].map[j] = -1;
+		}
+	}
 	
 	gettimeofday(&timer_begin, NULL);
 
@@ -539,15 +545,15 @@ int main(int argc, char **argv)
 		
 		network_map_groups_to_machines(groups, machines, nmachines);
 
-		for (i=0; i<nmachines; i++) {
-			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
-		
-			for (j=0; j<machines[i].ntasks; j++) {
-				printf("%i,", machines[i].tasks[j]);
-			}
-		
-			printf("\n");
-		}
+/*		for (i=0; i<nmachines; i++) {*/
+/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
+/*		*/
+/*			for (j=0; j<machines[i].ntasks; j++) {*/
+/*				printf("%i,", machines[i].tasks[j]);*/
+/*			}*/
+/*		*/
+/*			printf("\n");*/
+/*		}*/
 	
 		for (i=0; i<nmachines; i++) {
 			mapdata.m_init = machines[i].cm;
@@ -565,15 +571,15 @@ int main(int argc, char **argv)
 		
 		network_map_groups_to_machines(groups, machines, nmachines);
 
-		for (i=0; i<nmachines; i++) {
-			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);
-		
-			for (j=0; j<machines[i].ntasks; j++) {
-				printf("%i,", machines[i].tasks[j]);
-			}
-		
-			printf("\n");
-		}
+/*		for (i=0; i<nmachines; i++) {*/
+/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
+/*		*/
+/*			for (j=0; j<machines[i].ntasks; j++) {*/
+/*				printf("%i,", machines[i].tasks[j]);*/
+/*			}*/
+/*		*/
+/*			printf("\n");*/
+/*		}*/
 	
 		for (i=0; i<nmachines; i++) {
 			mapdata.m_init = machines[i].cm;
@@ -589,13 +595,23 @@ int main(int argc, char **argv)
 	}
 
 	gettimeofday(&timer_end, NULL);
-	
+
+/*printf("blah\n");*/
+/*exit(1);*/
+/*for (i=0; i<nmachines; i++) {*/
+/*	for (j=0; j<machines[i].ntasks; j++) {*/
+/*		printf("i %i, j %i, machines[i](%s).map[j] %i\n", i, j, machines[i].name, machines[i].map[j]);*/
+/*	}*/
+/*}*/
+
+
 	for (i=0; i<nt; i++)
 		map[i].machine = NULL;
 	
 	for (i=0; i<nmachines; i++) {
 		for (j=0; j<machines[i].ntasks; j++) {
 			assert(machines[i].tasks[j] < nt);
+/*			printf("i %i, j %i, machines[i].map[j] %i\n", i, j, machines[i].map[j]);*/
 			map[ machines[i].tasks[j] ].machine = &machines[i];
 			map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
 		}
@@ -646,6 +662,9 @@ int main(int argc, char **argv)
 	}
 	
 	printf("\n");
+	
+	elapsed = timer_end.tv_sec - timer_begin.tv_sec + (timer_end.tv_usec - timer_begin.tv_usec) / 1000000.0;
+	printf("mapping time: %.3f s\n", elapsed);
 	
 	return 0;
 }

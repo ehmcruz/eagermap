@@ -38,6 +38,7 @@ void libmapping_matrix_free(void *m)
 void libmapping_comm_matrix_init (comm_matrix_t *m, uint32_t nthreads)
 {
 	m->nthreads = nthreads;
+	assert(nthreads < MAX_THREADS);
 }
 
 char* libmapping_strtok(char *str, char *tok, char del, uint32_t bsize)
@@ -59,5 +60,20 @@ char* libmapping_strtok(char *str, char *tok, char del, uint32_t bsize)
 		return p;
 	else
 		return NULL;
+}
+
+uint8_t libmapping_env_get_integer(char *envname, int32_t *value)
+{
+	char *p;
+	
+	p = getenv(envname);
+	if (!p) {
+		return 0;
+	}
+
+	if (value != NULL)
+		*value = atoi(p);
+	
+	return 1;
 }
 
