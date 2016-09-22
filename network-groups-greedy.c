@@ -72,6 +72,25 @@ static void network_generate_group (comm_matrix_t *m, uint32_t ntasks, char *cho
 	}
 }
 
+static void network_generate_last_group (comm_matrix_t *m, uint32_t ntasks, char *chosen, machine_task_group_t *group)
+{
+	uint32_t i, j;
+
+	i = 0;
+	
+	for (j=0; j<ntasks; j++) {
+		if (!chosen[j]) {
+			chosen[j] = 1;
+			
+			group->tasks[i] = j;
+			
+			i++;
+		}
+	}
+	
+	assert(group->ntasks == i);
+}
+
 void network_create_comm_matrices (comm_matrix_t *m, machine_task_group_t *groups, uint32_t nmachines)
 {
 	uint32_t i, j, k;
@@ -110,8 +129,9 @@ void network_generate_groups (comm_matrix_t *m, uint32_t ntasks, machine_task_gr
 	for (i=0; i<ntasks; i++)
 		chosen[i] = 0;
 	
-	for (i=0; i<nmachines; i++)
+	for (i=0; i<(nmachines-1); i++)
 		network_generate_group(m, ntasks, chosen, &groups[i]);
+	network_generate_last_group(m, ntasks, chosen, &groups[nmachines-1]);
 	
 	network_create_comm_matrices(m, groups, nmachines);
 }

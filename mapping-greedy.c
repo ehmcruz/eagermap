@@ -80,6 +80,7 @@ static void generate_group_openmp(comm_matrix_t *m, uint32_t total_elements, uin
 			{
 				pnt = omp_get_num_threads();
 				assert(pnt <= MAX_PARALLEL_THREADS);
+/*				printf("pnt %i\n", pnt);*/
 			}
 			
 			my_id = omp_get_thread_num();
@@ -87,7 +88,7 @@ static void generate_group_openmp(comm_matrix_t *m, uint32_t total_elements, uin
 			
 			pcontext[my_id].local_wmax = -1;
 
-			#pragma omp for
+			#pragma omp for schedule(guided)
 			for (j=0; j<total_elements; j++) { // I will iterate over all elements to find the one that maximizes the communication relative to the elements that are already in the group
 				if (!chosen[j]) {
 					w = 0;
@@ -158,8 +159,10 @@ static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t l
 
 /*printf("kkk nelements %i done %i group->nelements %i level %i group_i %i levels_n %i\n", nelements, done, group->nelements, level, group_i, levels_n);*/
 
-		if (parallel_enabled && nelements >= pthreshold)
+		if (parallel_enabled && nelements >= pthreshold) {
+/*			printf("going parallel nelements %i\n", nelements);*/
 			generate_group_openmp(m, nelements, in_group, group, level, chosen);
+		}
 		else
 			generate_group(m, nelements, in_group, group, level, chosen);
 
@@ -260,7 +263,7 @@ static int detect_arity_of_levels_with_sharers(void *data, vertex_t *v, vertex_t
 
 void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 {
-	uint32_t pos, i;
+	uint32_t pos, i, pnt;
 
 	hardware_topology = data->topology;
 	levels_n = 2;
@@ -286,7 +289,17 @@ void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 	assert(groups != NULL);
 	
 	libmapping_env_get_integer("EAGERMAP_PARALLEL", &pthreshold);
-/*	printf("setting eagermap parallel threshold to %i\n", pthreshold);*/
+	printf("setting eagermap parallel threshold to %i\n", pthreshold);
+
+	#pragma omp parallel default(none) shared(pnt)
+	{
+		#pragma omp master
+		{
+			pnt = omp_get_num_threads();
+		}
+	}
+	
+	printf("number of threads: %u\n", pnt);
 
 	return NULL;
 }

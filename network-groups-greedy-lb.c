@@ -44,7 +44,7 @@ static void network_generate_last_group (comm_matrix_t *m, uint32_t ntasks, char
 	
 	for (j=0; j<ntasks; j++) {
 		if (unlikely(!chosen[j])) {
-			chosen[j] = 0;
+			chosen[j] = 1;
 			
 			group->tasks[i] = j;
 			group->ntasks++;

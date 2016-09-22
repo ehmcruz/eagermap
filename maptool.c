@@ -146,6 +146,34 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	return nt;
 }
 
+static void generate_nn_matrix (int nt, comm_matrix_t *m)
+{
+	int i, j, diff;
+	uint64_t max, comm;
+	
+	if (nt > 16)
+		max = 1 << 16;
+	else
+		max = 1 << nt;
+	
+	libmapping_comm_matrix_init(m, nt);
+	
+	for (i=nt-1; i>=0; i--) {
+		for (j=0; j<nt; j++) {
+			diff = i - j;
+			if (diff < 0)
+				diff *= -1;
+			if (i == j)
+				comm = 0;
+			else if (diff == 1)
+				comm = max;
+			else
+				comm = max >> diff;
+			comm_matrix_ptr_write(m, i, j, comm);
+		}
+	}
+}
+
 static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {
 	char tok[32], *p;
@@ -410,7 +438,7 @@ int main(int argc, char **argv)
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
 	FILE *fp;
-	char *buffer;
+	char *buffer, *fname_csv;
 	struct timeval timer_begin, timer_end;
 	double elapsed;
 	double quality;
@@ -427,19 +455,56 @@ int main(int argc, char **argv)
 	
 	use_load = (argc == 4);
 
-	fp = fopen(argv[1], "r");
-	assert(fp != NULL);
-	fseek(fp, 0, SEEK_END);
-	fsize = ftell(fp);
-	buffer = (char*)malloc(fsize+1);
-	assert(buffer != NULL);
-	rewind(fp);
-	assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
-	fclose(fp);
-	buffer[fsize] = 0;
+	fname_csv = argv[1];
 
-	nt = parse_csv(buffer, fsize, &m);
-	free(buffer);
+	if (fname_csv[0] != '-') {
+		fp = fopen(fname_csv, "r");
+		assert(fp != NULL);
+		fseek(fp, 0, SEEK_END);
+		fsize = ftell(fp);
+		buffer = (char*)malloc(fsize+1);
+		assert(buffer != NULL);
+		rewind(fp);
+		assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+		fclose(fp);
+		buffer[fsize] = 0;
+
+		nt = parse_csv(buffer, fsize, &m);
+		free(buffer);
+	}
+	else { // autogen comm matrix
+		if (fname_csv[1] == 'n') { // nearest neightbor
+			char *number, *s;
+			int error = 0;
+			
+			number = fname_csv+2;
+			
+			if (!(*number))
+				error = 1;
+			
+			for (s=number; *s; s++) {
+				if (!isdigit(*s))
+					error = 1;
+			}
+			
+			if (error) {
+				printf("autogen comm matrix nearest neightbor error: we need a number after -n, given %s\n", number);
+				exit(1);
+			}
+		
+			nt = atoi(number);
+			printf("autogen comm matrix nearest neightbor number of threads: %i\n", nt);
+			
+			if (!nt) {
+				printf("autogen comm matrix nearest neightbor error: we need a number of threads higher than 0\n");
+				exit(1);
+			}
+			
+			assert(nt <= MAX_THREADS);
+			
+			generate_nn_matrix(nt, &m);
+		}
+	}
 
 	LM_ASSERT(nt <= MAX_THREADS)
 	
@@ -538,6 +603,8 @@ int main(int argc, char **argv)
 		}
 	}
 	
+	printf("calculating mapping...\n");
+	
 	gettimeofday(&timer_begin, NULL);
 
 	if (!use_load) {
@@ -554,7 +621,7 @@ int main(int argc, char **argv)
 /*		*/
 /*			printf("\n");*/
 /*		}*/
-	
+/*printf("blah\n");*/
 		for (i=0; i<nmachines; i++) {
 			mapdata.m_init = machines[i].cm;
 			mapdata.map = machines[i].map;
