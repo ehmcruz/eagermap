@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <sys/time.h>
 #include <ctype.h>
+#include <string.h>
 
 #include "libmapping.h"
 
@@ -24,12 +25,12 @@ static double *loads = NULL;
 machine_t* get_machine_by_name (char *name)
 {
 	int i;
-	
+
 	for (i=0; i<nmachines; i++) {
 		if (!strcmp(machines[i].name, name))
 			return &machines[i];
 	}
-	
+
 	return NULL;
 }
 
@@ -109,7 +110,7 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 	uint64_t v;
 	uint32_t nt;
 	char NUMBER[100];
-	
+
 	s = buffer;
 	nt = 1;
 	while (*s != '\n') {
@@ -117,11 +118,11 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 			nt++;
 		s++;
 	}
-	
+
 	libmapping_comm_matrix_init(m, nt);
-	
+
 	s = buffer;
-	
+
 	trow = nt - 1;
 	for (i=0; i<nt; i++) {
 		for (j=0; j<nt; j++) {
@@ -136,13 +137,13 @@ static uint32_t parse_csv (char *buffer, uint32_t blen, comm_matrix_t *m)
 			trow--;
 		}
 	}
-	
+
 	// assert we found the end of the file
 	while (*s) {
 		assert(*s == '\n' || *s == '\t' || *s == '\r' || *s == ' ');
 		s++;
 	}
-	
+
 	return nt;
 }
 
@@ -150,14 +151,14 @@ static void generate_nn_matrix (int nt, comm_matrix_t *m)
 {
 	int i, j, diff;
 	uint64_t max, comm;
-	
+
 	if (nt > 16)
 		max = 1 << 16;
 	else
 		max = 1 << nt;
-	
+
 	libmapping_comm_matrix_init(m, nt);
-	
+
 	for (i=nt-1; i>=0; i--) {
 		for (j=0; j<nt; j++) {
 			diff = i - j;
@@ -178,25 +179,25 @@ static uint32_t to_vector(char *str, uint32_t *vec, uint32_t n)
 {
 	char tok[32], *p;
 	uint32_t i;
-	
+
 	p = str;
-	
+
 	p = libmapping_strtok(p, tok, ',', 32);
 	i = 0;
-	
+
 	while (p != NULL) {
 		assert(i < n);
 /*dprintf("token %s\n", tok);*/
 		vec[i++] = atoi(tok);
 		p = libmapping_strtok(p, tok, ',', 32);
 	}
-	
+
 	return i;
 }
 
 /*
 	machine file format:
-	
+
 	number_of_machines
 	(machine_name[i] arities_mem_hierarchy)*
 	(i arity (j latency)*)*
@@ -213,14 +214,14 @@ static void parse_machines (char *buffer, uint32_t blen)
 	int i, j;
 	int check_links;
 	uint64_t v;
-	
+
 	arities_str = malloc(1024);
 	assert(arities_str != NULL);
 	pus_str = malloc(10*1024);
 	assert(pus_str != NULL);
 
 	s = buffer;
-	
+
 	SKIP_SPACE
 	READ_STR(str)
 	if (strcmp(str, "machines")) {
@@ -235,18 +236,18 @@ static void parse_machines (char *buffer, uint32_t blen)
 	INCS
 	SKIP_SPACE
 	SKIP_NEWLINE
-	
+
 	nmachines = 0;
-	
+
 	while (*s) {
 		check_links = 0;
-		
+
 		SKIP_SPACE
 		if (*s == '\n') {
 			INCS
 			continue;
 		}
-		
+
 		READ_STR(str)
 		if (*s == ':')
 			check_links = 1;
@@ -275,14 +276,14 @@ static void parse_machines (char *buffer, uint32_t blen)
 			INCS
 		}
 		*p = 0;
-		
+
 		m->topology.n_levels = to_vector(arities_str, arities, 50);
 		m->topology.arities = malloc(sizeof(uint32_t) * m->topology.n_levels);
 		assert(m->topology.arities != NULL);
 		memcpy(m->topology.arities, arities, sizeof(uint32_t) * m->topology.n_levels);
-		
+
 		FORCE_SKIP_SPACE
-		
+
 		p = pus_str;
 		while (isdigit(*s) || *s == ',') {
 			*p = *s;
@@ -290,44 +291,44 @@ static void parse_machines (char *buffer, uint32_t blen)
 			INCS
 		}
 		*p = 0;
-		
+
 		m->best_pus = malloc(sizeof(uint32_t) * 1024);
 		assert(m->best_pus != NULL);
-		
+
 		m->npus_check = to_vector(pus_str, m->best_pus, 1024);
-		
+
 		SKIP_SPACE
 		SKIP_NEWLINE
 	}
-	
+
 	for (i=0; i<nmachines; i++) {
 		m = &machines[i];
-		
+
 		m->id = i;
 		m->links = NULL;
 		m->nlinks = 0;
 
 		printf("machine-%i %s: nlevels %i npus_check %i arities ", m->id, m->name, m->topology.n_levels, m->npus_check);
-		
+
 		for (j=0; j<m->topology.n_levels; j++)
 			printf("%u,", m->topology.arities[j]);
-		
+
 		printf(" pus ");
-		
+
 		for (j=0; j<m->npus_check; j++)
 			printf("%u,", m->best_pus[j]);
-		
+
 		printf("\n");
 
 	}
-	
+
 	while (*s) {
 		SKIP_SPACE
 		if (*s == '\n') {
 			INCS
 			continue;
 		}
-		
+
 		READ_STR(str)
 		m = get_machine_by_name(str);
 
@@ -335,44 +336,44 @@ static void parse_machines (char *buffer, uint32_t blen)
 			printf("can't find machine %s\n", str);
 			exit(1);
 		}
-		
+
 		SKIP_SPACE
-		
+
 		READ_STR(str)
 		m2 = get_machine_by_name(str);
-		
+
 		if (m2 == NULL) {
 			printf("can't find machine %s\n", str);
 			exit(1);
 		}
-		
+
 		SKIP_SPACE
-		
+
 		READ_INT(v)
-		
-		printf("link %s <---> %s (%llu)\n", m->name, m2->name, v);
-		
+
+		printf("link %s <---> %s (%lu)\n", m->name, m2->name, v);
+
 		m->links = (machine_link_t*)realloc(m->links, (m->nlinks+1)*sizeof(machine_link_t));
 		assert(m->links != NULL);
-		
+
 		for (i=0; i<m->nlinks; i++) {
 			if (m->links[i].machine == m2) {
 				printf("double link between machines %s and %s\n", m->name, m2->name);
 				exit(1);
 			}
 		}
-		
+
 		m->links[ m->nlinks ].machine = m2;
 		m->links[ m->nlinks ].weight = v;
 		m->nlinks++;
-		
+
 		SKIP_SPACE
-		
+
 		if (*s) {
 			SKIP_NEWLINE
 		}
 	}
-	
+
 	free(arities_str);
 	free(pus_str);
 }
@@ -382,14 +383,14 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 	int i;
 	char *s, *p;
 	char NUMBER[100];
-	
+
 	loads = malloc(nt * sizeof(double));
 	assert(loads != NULL);
-	
+
 	printf("parsing load...\n");
-	
+
 	s = buffer;
-	
+
 	for (i=0; i<nt; i++) {
 		if (!isdigit(*s)) {
 			printf("only numbers are allowed in the load file\n");
@@ -397,7 +398,7 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 		}
 
 		p = NUMBER;
-		
+
 		while (isdigit(*s)) {
 			*p = *s;
 			p++;
@@ -407,7 +408,7 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 			*p = *s;
 			p++;
 			INCS
-			
+
 			while (isdigit(*s)) {
 				*p = *s;
 				p++;
@@ -417,10 +418,10 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 		*p = 0;
 		loads[i] = atof(NUMBER);
 		printf("load %i %f\n", i, loads[i]);
-		
+
 		if (i < (nt-1)) {
 			FORCE_SKIP_SPACE_NEWLINE
-			
+
 			if (*s == 0) {
 				printf("we need %i loads in the load file (given %i)\n", nt, i+1);
 				exit(1);
@@ -447,12 +448,12 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map;
-	
+
 	if (argc != 3 && argc != 4) {
 		printf("Usage: %s csv_file machine_file [load_file]\n", argv[0]);
 		return 1;
 	}
-	
+
 	use_load = (argc == 4);
 
 	fname_csv = argv[1];
@@ -476,38 +477,38 @@ int main(int argc, char **argv)
 		if (fname_csv[1] == 'n') { // nearest neightbor
 			char *number, *s;
 			int error = 0;
-			
+
 			number = fname_csv+2;
-			
+
 			if (!(*number))
 				error = 1;
-			
+
 			for (s=number; *s; s++) {
 				if (!isdigit(*s))
 					error = 1;
 			}
-			
+
 			if (error) {
 				printf("autogen comm matrix nearest neightbor error: we need a number after -n, given %s\n", number);
 				exit(1);
 			}
-		
+
 			nt = atoi(number);
 			printf("autogen comm matrix nearest neightbor number of threads: %i\n", nt);
-			
+
 			if (!nt) {
 				printf("autogen comm matrix nearest neightbor error: we need a number of threads higher than 0\n");
 				exit(1);
 			}
-			
+
 			assert(nt <= MAX_THREADS);
-			
+
 			generate_nn_matrix(nt, &m);
 		}
 	}
 
 	LM_ASSERT(nt <= MAX_THREADS)
-	
+
 	fp = fopen(argv[2], "r");
 	assert(fp != NULL);
 	fseek(fp, 0, SEEK_END);
@@ -521,7 +522,7 @@ int main(int argc, char **argv)
 
 	parse_machines(buffer, fsize);
 	free(buffer);
-	
+
 	if (use_load) {
 		fp = fopen(argv[3], "r");
 		assert(fp != NULL);
@@ -537,33 +538,33 @@ int main(int argc, char **argv)
 		parse_loads(buffer, fsize, nt);
 		free(buffer);
 	}
-	
+
 	groups = malloc(nmachines * sizeof(machine_task_group_t));
 	assert(groups != NULL);
-	
+
 	map = malloc(sizeof(map_t) * nt);
 	assert(map != NULL);
-	
+
 	printf("Number of threads: %i\n", nt);
 	printf("Number of machines: %i\n", nmachines);
-	
+
 	for (i=0; i<nmachines; i++) {
 		machine = &machines[i];
-		
+
 		npus = 0;
 		nvertices = 0;
 		libmapping_get_n_pus_fake_topology(machine->topology.arities, machine->topology.n_levels, &npus, &nvertices);
 
 		weights = NULL;
-	
+
 		machine->topology.pu_number = npus;
 		libmapping_graph_init(&machine->topology.graph, nvertices, nvertices-1);
 		machine->topology.root = libmapping_create_fake_topology(&machine->topology, machine->topology.arities, machine->topology.n_levels, NULL, weights);
 		machine->topology.root->weight = 0;
 		machine->topology.root->type = GRAPH_ELTYPE_ROOT;
-	
+
 		libmapping_topology_analysis(&machine->topology);
-		
+
 		assert(machine->npus_check == machine->topology.pu_number);
 
 		printf("Hardware topology with %u levels, %u PUs and %u vertices, pus: ", machine->topology.n_levels, machine->topology.pu_number, nvertices);
@@ -572,14 +573,14 @@ int main(int argc, char **argv)
 		for (j=0; j<machine->topology.pu_number; j++)
 			printf("%i,", machine->topology.best_pus[j]);
 		printf("\n");
-		
+
 		groups[i].id = i;
 		groups[i].npus = machine->topology.pu_number;
 	}
 /*nt=128;*/
 
 	network_floyd_warshall(machines, nmachines);
-	
+
 	if (!use_load) {
 		for (i=0; i<nmachines; i++) {
 			init.topology = &machines[i].topology;
@@ -602,14 +603,14 @@ int main(int argc, char **argv)
 			machines[i].map[j] = -1;
 		}
 	}
-	
+
 	printf("calculating mapping...\n");
-	
+
 	gettimeofday(&timer_begin, NULL);
 
 	if (!use_load) {
 		network_generate_groups(&m, nt, groups, nmachines);
-		
+
 		network_map_groups_to_machines(groups, machines, nmachines);
 
 /*		for (i=0; i<nmachines; i++) {*/
@@ -625,7 +626,7 @@ int main(int argc, char **argv)
 		for (i=0; i<nmachines; i++) {
 			mapdata.m_init = machines[i].cm;
 			mapdata.map = machines[i].map;
-	
+
 			libmapping_mapping_algorithm_greedy_map(&mapdata);
 		}
 	}
@@ -635,7 +636,7 @@ int main(int argc, char **argv)
 	#else
 		network_generate_groups(&m, nt, groups, nmachines);
 	#endif
-		
+
 		network_map_groups_to_machines(groups, machines, nmachines);
 
 /*		for (i=0; i<nmachines; i++) {*/
@@ -647,12 +648,12 @@ int main(int argc, char **argv)
 /*		*/
 /*			printf("\n");*/
 /*		}*/
-	
+
 		for (i=0; i<nmachines; i++) {
 			mapdata.m_init = machines[i].cm;
 			mapdata.map = machines[i].map;
 			mapdata.loads = loads;
-	
+
 		#ifdef ENABLE_LOAD_BALANCE
 			libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
 		#else
@@ -674,7 +675,7 @@ int main(int argc, char **argv)
 
 	for (i=0; i<nt; i++)
 		map[i].machine = NULL;
-	
+
 	for (i=0; i<nmachines; i++) {
 		for (j=0; j<machines[i].ntasks; j++) {
 			assert(machines[i].tasks[j] < nt);
@@ -683,55 +684,55 @@ int main(int argc, char **argv)
 			map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
 		}
 	}
-	
+
 	for (i=0; i<nt; i++) {
 		assert(map[i].machine != NULL);
 	}
-	
+
 	if (use_load) {
 		printf("loads per machine:\n");
-	
+
 		for (i=0; i<nmachines; i++) {
 			machine_load = 0.0;
 			for (j=0; j<machines[i].ntasks; j++)
 				machine_load += loads[ machines[i].tasks[j] ];
 			printf("%s (%.3f): ", machines[i].name, machine_load);
-		
+
 /*			machine_load = 0.0;*/
 			for (j=0; j<machines[i].topology.pu_number; j++) {
 				pu_load = 0.0;
-			
+
 				for (k=0; k<machines[i].ntasks; k++) {
 					if (machines[i].map[k] == j)
 						pu_load += loads[ machines[i].tasks[k] ];
 				}
-			
+
 				printf("%.3f ", pu_load);
-			
+
 /*				machine_load += pu_load;*/
 			}
-		
+
 /*			printf("--> %.3f", machine_load);*/
 			printf("\n");
 		}
 	}
-	
+
 	for (i=0; i<nt; i++) {
 		printf("rank %i=%s slot=%i\n", i, map[i].machine->name, map[i].pu);
 	}
-	
+
 	printf("single machine mapping: ");
-	
+
 	for (i=0; i<nt; i++) {
 		printf("%i", map[i].pu);
 		if (i < (nt-1))
 			printf(",");
 	}
-	
+
 	printf("\n");
-	
+
 	elapsed = timer_end.tv_sec - timer_begin.tv_sec + (timer_end.tv_usec - timer_begin.tv_usec) / 1000000.0;
 	printf("mapping time: %.3f s\n", elapsed);
-	
+
 	return 0;
 }
