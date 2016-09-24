@@ -42,7 +42,7 @@ void libmapping_comm_matrix_init (comm_matrix_t *m, uint32_t nthreads)
 {
 	m->nthreads = nthreads;
 	assert(nthreads <= MAX_THREADS);
-
+	
 	m->max = libmapping_get_next_power_of_two(nthreads);
 	m->bits = libmapping_get_log2(m->max);	
 /*	printf("m->bits %i m->max %i\n", m->bits, m->max);exit(1);*/
