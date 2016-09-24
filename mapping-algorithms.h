@@ -3,6 +3,7 @@
 
 typedef struct thread_map_alg_init_t {
 	topology_t *topology;
+	int nt;
 } thread_map_alg_init_t;
 
 typedef struct thread_map_alg_map_t {

@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <ctype.h>
 
-#define MAX_THREADS_BITS 12
+#define MAX_THREADS_BITS 14
 #define MAX_THREADS (1 << MAX_THREADS_BITS)
 
 #include "lib.h"

@@ -20,8 +20,11 @@ void* libmapping_matrix_malloc(uint32_t nrows, uint32_t ncols, uint32_t type_siz
 	uint32_t i;
 
 	p = (void**)lm_calloc(nrows, sizeof(void*));
+	assert(p != NULL);
 
 	p[0] = (void*)lm_calloc(nrows*ncols, type_size);
+	assert(p[0] != NULL);
+	
 	for (i=1; i<nrows; i++)
 		p[i] = p[0] + i*ncols*type_size;
 
@@ -38,7 +41,14 @@ void libmapping_matrix_free(void *m)
 void libmapping_comm_matrix_init (comm_matrix_t *m, uint32_t nthreads)
 {
 	m->nthreads = nthreads;
-	assert(nthreads < MAX_THREADS);
+	assert(nthreads <= MAX_THREADS);
+
+	m->max = libmapping_get_next_power_of_two(nthreads);
+	m->bits = libmapping_get_log2(m->max);	
+/*	printf("m->bits %i m->max %i\n", m->bits, m->max);exit(1);*/
+
+	m->matrix = lm_calloc(m->max * m->max, sizeof(uint64_t));
+	assert(m->matrix != NULL);
 }
 
 char* libmapping_strtok(char *str, char *tok, char del, uint32_t bsize)

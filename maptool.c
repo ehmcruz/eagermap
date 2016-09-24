@@ -430,6 +430,17 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 	}
 }
 
+static void generate_full_load (int nt)
+{
+	int i;
+	
+	loads = malloc(nt * sizeof(double));
+	assert(loads != NULL);
+
+	for (i=0; i<nt; i++)
+		loads[i] = 1.0;
+}
+
 int main(int argc, char **argv)
 {
 	static comm_matrix_t m;
@@ -438,7 +449,7 @@ int main(int argc, char **argv)
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
 	FILE *fp;
-	char *buffer, *fname_csv;
+	char *buffer, *fname_csv, *fname_load;
 	struct timeval timer_begin, timer_end;
 	double elapsed;
 	double quality;
@@ -447,6 +458,8 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map;
+	
+	printf("compiled to support up to %i threads\n", MAX_THREADS);
 	
 	if (argc != 3 && argc != 4) {
 		printf("Usage: %s csv_file machine_file [load_file]\n", argv[0]);
@@ -504,6 +517,9 @@ int main(int argc, char **argv)
 			
 			generate_nn_matrix(nt, &m);
 		}
+		else {
+			assert(0);
+		}
 	}
 
 	LM_ASSERT(nt <= MAX_THREADS)
@@ -523,19 +539,32 @@ int main(int argc, char **argv)
 	free(buffer);
 	
 	if (use_load) {
-		fp = fopen(argv[3], "r");
-		assert(fp != NULL);
-		fseek(fp, 0, SEEK_END);
-		fsize = ftell(fp);
-		buffer = (char*)malloc(fsize+1);
-		assert(buffer != NULL);
-		rewind(fp);
-		assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
-		fclose(fp);
-		buffer[fsize] = 0;
+		fname_load = argv[3];
+		
+		if (fname_load[0] != '-') {
+			fp = fopen(fname_load, "r");
+			assert(fp != NULL);
+			fseek(fp, 0, SEEK_END);
+			fsize = ftell(fp);
+			buffer = (char*)malloc(fsize+1);
+			assert(buffer != NULL);
+			rewind(fp);
+			assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+			fclose(fp);
+			buffer[fsize] = 0;
 
-		parse_loads(buffer, fsize, nt);
-		free(buffer);
+			parse_loads(buffer, fsize, nt);
+			free(buffer);
+		}
+		else { // autogen loads
+			if (fname_load[1] == 'f') { // full load
+				printf("autogen full load\n");
+				generate_full_load(nt);
+			}
+			else {
+				assert(0);
+			}
+		}
 	}
 	
 	groups = malloc(nmachines * sizeof(machine_task_group_t));
@@ -579,6 +608,8 @@ int main(int argc, char **argv)
 /*nt=128;*/
 
 	network_floyd_warshall(machines, nmachines);
+	
+	init.nt = nt;
 	
 	if (!use_load) {
 		for (i=0; i<nmachines; i++) {

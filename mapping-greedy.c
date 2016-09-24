@@ -12,13 +12,14 @@ typedef struct thread_group_t {
 	group_type_t type;
 	uint32_t id;
 	uint32_t nelements;
-	struct thread_group_t *elements[MAX_THREADS];
+	struct thread_group_t **elements;
 } thread_group_t;
 
 static uint32_t arities[16];
 static uint32_t exec_el_in_level[16];
 static uint32_t levels_n = 0;
 static thread_group_t **groups; // one for each level
+static thread_group_t root_group;
 static comm_matrix_t matrix_[2];
 static topology_t *hardware_topology;
 static uint32_t winners[MAX_THREADS], chosen[MAX_THREADS];
@@ -152,10 +153,15 @@ static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t l
 			in_group++;
 			leftover--;
 		}
+
+		assert(group_i < exec_el_in_level[level]);
+
 		group = &groups[level][group_i];
 		group->type = GROUP_TYPE_GROUP;
 		group->nelements = in_group;
 		group->id = group_i;
+		
+		assert(in_group <= exec_el_in_level[level-1]);
 
 /*printf("kkk nelements %i done %i group->nelements %i level %i group_i %i levels_n %i\n", nelements, done, group->nelements, level, group_i, levels_n);*/
 
@@ -261,6 +267,32 @@ static int detect_arity_of_levels_with_sharers(void *data, vertex_t *v, vertex_t
 		return 1;
 }
 
+static void alloc_group_tree (thread_map_alg_init_t *data)
+{
+	uint32_t i, j;
+	
+	groups = lm_calloc(levels_n, sizeof(thread_group_t*));
+	assert(groups != NULL);
+	
+	for (i=0; i<levels_n; i++) {
+		groups[i] = lm_calloc(exec_el_in_level[i], sizeof(thread_group_t));
+		assert(groups[i] != NULL);
+	}
+	
+	for (j=0; j<exec_el_in_level[0]; j++)
+		groups[0][j].elements = NULL;
+	
+	for (i=1; i<levels_n; i++) {
+		for (j=0; j<exec_el_in_level[i]; j++) {
+			groups[i][j].elements = lm_calloc(exec_el_in_level[i-1], sizeof(thread_group_t*));
+			assert(groups[i][j].elements != NULL);
+		}
+	}
+	
+	root_group.elements = lm_calloc(exec_el_in_level[levels_n-1], sizeof(thread_group_t*));
+	assert(root_group.elements != NULL);
+}
+
 void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 {
 	uint32_t pos, i, pnt;
@@ -273,8 +305,9 @@ void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 	pos = levels_n - 1;
 	libmapping_topology_walk_pre_order(data->topology, detect_arity_of_levels_with_sharers, &pos);
 
-	exec_el_in_level[0] = data->topology->pu_number;
-	for (i=1; i<levels_n; i++) {
+	exec_el_in_level[0] = data->nt;
+	exec_el_in_level[1] = data->topology->pu_number;
+	for (i=2; i<levels_n; i++) {
 		exec_el_in_level[i] = exec_el_in_level[i - 1] / arities[i];
 	}
 
@@ -283,10 +316,12 @@ void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 			levels_n = i;
 		}
 	}
+
+	libmapping_comm_matrix_init(&matrix_[0], data->nt);
+	libmapping_comm_matrix_init(&matrix_[1], data->nt);
 	
 /*	printf("used %u levels\n", levels_n);*/
-	groups = libmapping_matrix_malloc(levels_n, MAX_THREADS, sizeof(thread_group_t));
-	assert(groups != NULL);
+	alloc_group_tree(data);
 	
 	libmapping_env_get_integer("EAGERMAP_PARALLEL", &pthreshold);
 	printf("setting eagermap parallel threshold to %i\n", pthreshold);
@@ -304,18 +339,17 @@ void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 	return NULL;
 }
 
-
 void libmapping_mapping_algorithm_greedy_map (thread_map_alg_map_t *data)
 {
 	uint32_t nelements, i, ngroups, matrix_i;
 	comm_matrix_t *m, *oldm;
-	static thread_group_t root_group;
 
 	matrix_i = 0;
 
 /*printf("blah 2\n");*/
 /*for (i=0; i<MAX_THREADS; i++) printf("%i ", data->map[i]);*/
 /*printf("\n");*/
+/*printf("data->m_init->nthreads %i\n", data->m_init->nthreads);*/
 
 	for (i=0; i<data->m_init->nthreads; i++) {
 		groups[0][i].type = GROUP_TYPE_THREAD;
@@ -343,6 +377,9 @@ void libmapping_mapping_algorithm_greedy_map (thread_map_alg_map_t *data)
 
 	root_group.type = GROUP_TYPE_GROUP;
 	root_group.nelements = nelements;
+	
+/*printf("nelements %i exec_el_in_level[levels_n-1] %i\n", nelements, exec_el_in_level[levels_n-1]);*/
+	assert(nelements <= exec_el_in_level[levels_n-1]);
 
 	for (i=0; i<nelements; i++) {
 		root_group.elements[i] = &groups[levels_n-1][i];

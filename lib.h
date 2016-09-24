@@ -22,8 +22,12 @@
 #define unlikely(x)     __builtin_expect((x),0)
 
 struct spcd_comm_matrix {
-	uint64_t matrix[MAX_THREADS*MAX_THREADS];
+	uint64_t *matrix;
 	uint32_t nthreads;
+	
+	// internal use only
+	uint32_t bits;
+	uint32_t max;
 };
 
 typedef struct spcd_comm_matrix comm_matrix_t;
@@ -31,16 +35,16 @@ typedef struct spcd_comm_matrix comm_matrix_t;
 static inline
 uint64_t get_matrix(struct spcd_comm_matrix *m, int i, int j)
 {
-	return i > j ? m->matrix[(i<<MAX_THREADS_BITS) + j] : m->matrix[(j<<MAX_THREADS_BITS) + i];
+	return i > j ? m->matrix[(i << m->bits) + j] : m->matrix[(j << m->bits) + i];
 }
 
 static inline
 void set_matrix(struct spcd_comm_matrix *m, int i, int j, uint64_t v)
 {
 	if (i > j)
-		m->matrix[(i << MAX_THREADS_BITS) + j] = v;
+		m->matrix[(i << m->bits) + j] = v;
 	else
-		m->matrix[(j << MAX_THREADS_BITS) + i] = v;
+		m->matrix[(j << m->bits) + i] = v;
 }
 
 
