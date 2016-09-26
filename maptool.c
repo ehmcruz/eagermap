@@ -763,7 +763,7 @@ int main(int argc, char **argv)
 	printf("\n");
 
 	elapsed = timer_end.tv_sec - timer_begin.tv_sec + (timer_end.tv_usec - timer_begin.tv_usec) / 1000000.0;
-	printf("mapping time: %.3f s\n", elapsed);
+	printf("mapping time: %.5f s\n", elapsed);
 
 	return 0;
 }
