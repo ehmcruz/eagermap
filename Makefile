@@ -21,7 +21,7 @@ objfiles=$(patsubst %.c,%.o,$(csrcfiles))
 all: eagermap
 
 eagermap: $(objfiles)
-	gcc -o $@ $(objfiles) $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $@ $(objfiles) $(CFLAGS) $(LDFLAGS)
 
 clean:
 	rm -f *.o eagermap maptool
