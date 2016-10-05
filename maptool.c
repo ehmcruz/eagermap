@@ -417,7 +417,7 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 		}
 		*p = 0;
 		loads[i] = atof(NUMBER);
-		printf("load %i %f\n", i, loads[i]);
+		printf("load[%i] = %f\n", i, loads[i]);
 
 		if (i < (nt-1)) {
 			FORCE_SKIP_SPACE_NEWLINE
@@ -442,6 +442,25 @@ static void generate_full_load (int nt)
 		loads[i] = 1.0;
 }
 
+static void normalize_load (int nt)
+{
+	int i;
+	double max;
+	
+	printf("normalizing loads...\n");
+	
+	max = loads[0];
+	for (i=1; i<nt; i++) {
+		if (loads[i] > max)
+			max = loads[i];
+	}
+	
+	for (i=0; i<nt; i++) {
+		loads[i] /= max;
+		printf("load[%i] = %.3f\n", i, loads[i]);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	static comm_matrix_t m;
@@ -459,15 +478,17 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map;
+	int norm;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
 	
-	if (argc != 3 && argc != 4) {
-		printf("Usage: %s csv_file machine_file [load_file]\n", argv[0]);
+	if (argc < 3 || argc > 5) {
+		printf("Usage: %s csv_file machine_file [load_file] [-norm]\n", argv[0]);
 		return 1;
 	}
 
-	use_load = (argc == 4);
+	use_load = (argc >= 4);
+	norm = (argc == 5);
 
 	fname_csv = argv[1];
 
@@ -565,6 +586,13 @@ int main(int argc, char **argv)
 			else {
 				assert(0);
 			}
+		}
+		
+		if (norm) {
+			if (strcmp(argv[4], "-norm"))
+				norm = 0;
+			if (norm)
+				normalize_load(nt);
 		}
 	}
 

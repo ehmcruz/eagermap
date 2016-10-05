@@ -1,6 +1,66 @@
+
 #include "libmapping.h"
 
 static char chosen[MAX_THREADS];
+
+static void balance_load (machine_task_group_t *gh, machine_task_group_t *gl, double *loads)
+{
+	int i, best_diff_i;
+	double diff, best_diff, target_diff;
+	
+	if (gh->load < gl->load) {
+		machine_task_group_t *tmp;
+		tmp = gh;
+		gh = gl;
+		gl = tmp;
+	}
+	
+/*	target_diff = (gh->load - gl->load) / 2.0;*/
+/*	*/
+/*	best_diff_i = 0;*/
+/*	best_diff = gh->load - loads[ group->tasks[0] ] - target_diff;*/
+/*	*/
+/*	for (i=1; i<gh->nelements; i++) {*/
+/*		diff = gh->load - loads[ group->tasks[i] ] - target_diff;*/
+/*	}*/
+}
+
+static int balance_load_exchange (machine_task_group_t *gh, machine_task_group_t *gl, double *loads)
+{
+	int i, highest, taskh, taskl;
+	
+	if (gh->ntasks == 0 || gl->ntasks == 0)
+		return 0;
+	
+	if (gh->load < gl->load) {
+		machine_task_group_t *tmp;
+		tmp = gh;
+		gh = gl;
+		gl = tmp;
+	}
+	
+	taskh = gh->tasks[0];
+	for (i=1; i<gh->ntasks; i++) {
+		if (load[ gh->tasks[i] ] < load[ taskh ])
+			taskh = gh->tasks[i];
+	}
+	
+	taskl = -1;
+	for (i=0; i<gl->ntasks; i++) {
+		if (load[ gl->tasks[i] ] < load[taskh] && (taskl == -1 || load[ gl->tasks[i] ] > load[ taskl ]))
+			taskl = gl->tasks[i];
+	}
+	
+	if (taskl != -1) {
+		gh->load -= ()
+	}
+}
+
+/*
+	2       1      target_diff = 0.5
+	0.2     0.8    diff = 0.6
+	
+*/
 
 static void network_generate_group_lb (comm_matrix_t *m, uint32_t ntasks, char *chosen, machine_task_group_t *group, double *loads, double max_load)
 {
@@ -10,7 +70,8 @@ static void network_generate_group_lb (comm_matrix_t *m, uint32_t ntasks, char *
 
 	group->ntasks = 0;
 	group->load = 0.0;
-	
+
+printf("max_load %.3f", max_load);
 	for (i=0; group->load<max_load; i++) { // in each iteration, find one element of the group
 		wmax = -1;
 		for (j=0; j<ntasks; j++) { // iterate over all elements to find the one that maximizes the communication relative to the elements that are already in the group
@@ -25,13 +86,19 @@ static void network_generate_group_lb (comm_matrix_t *m, uint32_t ntasks, char *
 				}
 			}
 		}
+		
+		if ((group->load + loads[winner]) > (max_load*1.12))
+			break;
 
 		chosen[winner] = 1;
 		group->tasks[i] = winner;
 		group->ntasks++;
 		group->load += loads[winner];
+printf(" load(%i) %.3f", winner, loads[winner]);
 /*		group->elements[i] = &groups[level-1][winner];*/
 	}
+printf(" total %.3f\n", group->load);
+//getchar();
 }
 
 static void network_generate_last_group (comm_matrix_t *m, uint32_t ntasks, char *chosen, machine_task_group_t *group, double *loads)
