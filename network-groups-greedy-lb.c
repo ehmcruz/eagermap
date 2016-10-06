@@ -27,7 +27,7 @@ static void balance_load (machine_task_group_t *gh, machine_task_group_t *gl, do
 
 static int balance_load_exchange (machine_task_group_t *gh, machine_task_group_t *gl, double *loads)
 {
-	int i, highest, taskh, taskl;
+	int i, h, l, highest, taskh, taskl;
 	
 	if (gh->ntasks == 0 || gl->ntasks == 0)
 		return 0;
@@ -39,21 +39,38 @@ static int balance_load_exchange (machine_task_group_t *gh, machine_task_group_t
 		gl = tmp;
 	}
 	
+	h = 0;
 	taskh = gh->tasks[0];
 	for (i=1; i<gh->ntasks; i++) {
-		if (load[ gh->tasks[i] ] < load[ taskh ])
+		if (loads[ gh->tasks[i] ] > loads[ taskh ]) {
 			taskh = gh->tasks[i];
+			h = i;
+		}
 	}
 	
 	taskl = -1;
 	for (i=0; i<gl->ntasks; i++) {
-		if (load[ gl->tasks[i] ] < load[taskh] && (taskl == -1 || load[ gl->tasks[i] ] > load[ taskl ]))
+		if (loads[ gl->tasks[i] ] < loads[taskh] && (taskl == -1 || loads[ gl->tasks[i] ] > loads[ taskl ])) {
 			taskl = gl->tasks[i];
+			l = i;
+		}
 	}
 	
 	if (taskl != -1) {
-		gh->load -= ()
+		printf("exchanged tasks %i(%.3f) and %i(%.3f)\n", taskh, loads[taskh], taskl, loads[taskl]);
+	
+		gh->tasks[h] = taskl;
+		gh->load -= loads[taskh];
+		gh->load += loads[taskl];
+		
+		gl->tasks[l] = taskh;
+		gl->load += loads[taskh];
+		gl->load -= loads[taskl];
+		
+		return 1;
 	}
+	
+	return 0;
 }
 
 /*
@@ -71,7 +88,7 @@ static void network_generate_group_lb (comm_matrix_t *m, uint32_t ntasks, char *
 	group->ntasks = 0;
 	group->load = 0.0;
 
-printf("max_load %.3f", max_load);
+/*printf("max_load %.3f", max_load);*/
 	for (i=0; group->load<max_load; i++) { // in each iteration, find one element of the group
 		wmax = -1;
 		for (j=0; j<ntasks; j++) { // iterate over all elements to find the one that maximizes the communication relative to the elements that are already in the group
@@ -87,17 +104,17 @@ printf("max_load %.3f", max_load);
 			}
 		}
 		
-		if ((group->load + loads[winner]) > (max_load*1.12))
-			break;
+/*		if ((group->load + loads[winner]) > (max_load*1.12))*/
+/*			break;*/
 
 		chosen[winner] = 1;
 		group->tasks[i] = winner;
 		group->ntasks++;
 		group->load += loads[winner];
-printf(" load(%i) %.3f", winner, loads[winner]);
+/*printf(" load(%i) %.3f", winner, loads[winner]);*/
 /*		group->elements[i] = &groups[level-1][winner];*/
 	}
-printf(" total %.3f\n", group->load);
+/*printf(" total %.3f\n", group->load);*/
 //getchar();
 }
 
@@ -124,7 +141,8 @@ static void network_generate_last_group (comm_matrix_t *m, uint32_t ntasks, char
 
 void network_generate_groups_load (comm_matrix_t *m, uint32_t ntasks, machine_task_group_t *groups, uint32_t nmachines, double *loads)
 {
-	uint32_t i, total_pus, done_pus;
+	uint32_t total_pus, done_pus;
+	int i, j;
 	double avg_load_per_pu, total_load, done_load, total_group_load;
 	
 	total_load = 0.0;
@@ -151,6 +169,9 @@ void network_generate_groups_load (comm_matrix_t *m, uint32_t ntasks, machine_ta
 		done_pus += groups[i].npus;
 	}
 	network_generate_last_group(m, ntasks, chosen, &groups[nmachines-1], loads);
+
+	for (i=0, j=nmachines-1; i<j; i++, j--)
+		balance_load_exchange(&groups[i], &groups[j], loads);
 	
 	network_create_comm_matrices(m, groups, nmachines);
 }
