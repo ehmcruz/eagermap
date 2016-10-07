@@ -461,6 +461,17 @@ static void normalize_load (int nt)
 	}
 }
 
+static void convert_topo_to_scotch_graph (char *fname)
+{
+	FILE *fp;
+	
+	fp = fopen(fname, "w");
+	assert(fp != NULL);
+	
+	
+	fclose(fp);
+}
+
 static void display_usage (int argc, char **argv)
 {
 	printf("Usage: %s csv_file machine_file [load_file] [-norm]\n", argv[0]);
