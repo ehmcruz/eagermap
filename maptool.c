@@ -461,6 +461,12 @@ static void normalize_load (int nt)
 	}
 }
 
+static void display_usage (int argc, char **argv)
+{
+	printf("Usage: %s csv_file machine_file [load_file] [-norm]\n", argv[0]);
+	exit(1);
+}
+
 int main(int argc, char **argv)
 {
 	static comm_matrix_t m;
@@ -469,7 +475,7 @@ int main(int argc, char **argv)
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
 	FILE *fp;
-	char *buffer, *fname_csv, *fname_load;
+	char *buffer, *fname_csv, *fname_load, *fname_topo;
 	struct timeval timer_begin, timer_end;
 	double elapsed;
 	double quality;
@@ -478,123 +484,143 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map;
-	int norm;
+	int norm, args_normal;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
-	
-	if (argc < 3 || argc > 5) {
-		printf("Usage: %s csv_file machine_file [load_file] [-norm]\n", argv[0]);
-		return 1;
-	}
 
-	use_load = (argc >= 4);
-	norm = (argc == 5);
+	use_load = 0;
+	norm = 0;
+	args_normal = 0;
 
-	fname_csv = argv[1];
+	for (i=1; i<argc; i++) {
+		if (argv[i][0] == '-') {
+			if (argv[i][1] == 'n' && args_normal == 0) { // automatically generate nearest neightbor matrix
+				char *number, *s;
+				int error = 0;
+				
+				fname_csv = argv[i];
 
-	if (fname_csv[0] != '-') {
-		fp = fopen(fname_csv, "r");
-		assert(fp != NULL);
-		fseek(fp, 0, SEEK_END);
-		fsize = ftell(fp);
-		buffer = (char*)malloc(fsize+1);
-		assert(buffer != NULL);
-		rewind(fp);
-		assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
-		fclose(fp);
-		buffer[fsize] = 0;
+				number = fname_csv+2;
 
-		nt = parse_csv(buffer, fsize, &m);
-		free(buffer);
-	}
-	else { // autogen comm matrix
-		if (fname_csv[1] == 'n') { // nearest neightbor
-			char *number, *s;
-			int error = 0;
-
-			number = fname_csv+2;
-
-			if (!(*number))
-				error = 1;
-
-			for (s=number; *s; s++) {
-				if (!isdigit(*s))
+				if (!(*number))
 					error = 1;
+
+				for (s=number; *s; s++) {
+					if (!isdigit(*s))
+						error = 1;
+				}
+
+				if (error) {
+					printf("autogen comm matrix nearest neightbor error: we need a number after -n, given %s\n", number);
+					exit(1);
+				}
+
+				nt = atoi(number);
+				printf("autogen comm matrix nearest neightbor number of threads: %i\n", nt);
+
+				if (!nt) {
+					printf("autogen comm matrix nearest neightbor error: we need a number of threads higher than 0\n");
+					exit(1);
+				}
+
+				assert(nt <= MAX_THREADS);
+
+				generate_nn_matrix(nt, &m);
+				
+				args_normal++;
 			}
-
-			if (error) {
-				printf("autogen comm matrix nearest neightbor error: we need a number after -n, given %s\n", number);
-				exit(1);
+			else if (argv[i][1] == 'f' && args_normal == 2) { // automatically generate full load
+				printf("autogen full load\n");
+				use_load = 1;
+				generate_full_load(nt);
+				
+				args_normal++;
 			}
-
-			nt = atoi(number);
-			printf("autogen comm matrix nearest neightbor number of threads: %i\n", nt);
-
-			if (!nt) {
-				printf("autogen comm matrix nearest neightbor error: we need a number of threads higher than 0\n");
-				exit(1);
-			}
-
-			assert(nt <= MAX_THREADS);
-
-			generate_nn_matrix(nt, &m);
+			else if (!strcmp(argv[i], "-norm"))
+				norm = 1;
+			else
+				display_usage(argc, argv);
 		}
 		else {
-			assert(0);
+			if (args_normal == 0) { // parse csv file as comm matrix
+				fname_csv = argv[i];
+				
+				printf("csv input matrix: %s\n", fname_csv);
+				
+				fp = fopen(fname_csv, "r");
+				assert(fp != NULL);
+				fseek(fp, 0, SEEK_END);
+				fsize = ftell(fp);
+				buffer = (char*)malloc(fsize+1);
+				assert(buffer != NULL);
+				rewind(fp);
+				assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+				fclose(fp);
+				buffer[fsize] = 0;
+
+				nt = parse_csv(buffer, fsize, &m);
+				free(buffer);
+				
+				LM_ASSERT(nt <= MAX_THREADS)
+				
+				args_normal++;
+			}
+			else if (args_normal == 1) { // parse topo
+				fname_topo = argv[i];
+				printf("topology input: %s\n", fname_topo);
+				
+				fp = fopen(fname_topo, "r");
+				assert(fp != NULL);
+				fseek(fp, 0, SEEK_END);
+				fsize = ftell(fp);
+				buffer = (char*)malloc(fsize+1);
+				assert(buffer != NULL);
+				rewind(fp);
+				assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+				fclose(fp);
+				buffer[fsize] = 0;
+
+				parse_machines(buffer, fsize);
+				free(buffer);
+				
+				args_normal++;
+			}
+			else if (args_normal == 2) { // parse load
+				fname_load = argv[i];
+				
+				printf("load input file: %s\n", fname_load);
+				
+				use_load = 1;
+				
+				fp = fopen(fname_load, "r");
+				assert(fp != NULL);
+				fseek(fp, 0, SEEK_END);
+				fsize = ftell(fp);
+				buffer = (char*)malloc(fsize+1);
+				assert(buffer != NULL);
+				rewind(fp);
+				assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+				fclose(fp);
+				buffer[fsize] = 0;
+
+				parse_loads(buffer, fsize, nt);
+				free(buffer);
+				
+				args_normal++;
+			}
+			else
+				display_usage(argc, argv);
 		}
 	}
+	
+	if (args_normal < 2)
+		display_usage(argc, argv);
 
-	LM_ASSERT(nt <= MAX_THREADS)
+	if (!use_load)
+		printf("do not balance the load\n");
 
-	fp = fopen(argv[2], "r");
-	assert(fp != NULL);
-	fseek(fp, 0, SEEK_END);
-	fsize = ftell(fp);
-	buffer = (char*)malloc(fsize+1);
-	assert(buffer != NULL);
-	rewind(fp);
-	assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
-	fclose(fp);
-	buffer[fsize] = 0;
-
-	parse_machines(buffer, fsize);
-	free(buffer);
-
-	if (use_load) {
-		fname_load = argv[3];
-		
-		if (fname_load[0] != '-') {
-			fp = fopen(fname_load, "r");
-			assert(fp != NULL);
-			fseek(fp, 0, SEEK_END);
-			fsize = ftell(fp);
-			buffer = (char*)malloc(fsize+1);
-			assert(buffer != NULL);
-			rewind(fp);
-			assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
-			fclose(fp);
-			buffer[fsize] = 0;
-
-			parse_loads(buffer, fsize, nt);
-			free(buffer);
-		}
-		else { // autogen loads
-			if (fname_load[1] == 'f') { // full load
-				printf("autogen full load\n");
-				generate_full_load(nt);
-			}
-			else {
-				assert(0);
-			}
-		}
-		
-		if (norm) {
-			if (strcmp(argv[4], "-norm"))
-				norm = 0;
-			if (norm)
-				normalize_load(nt);
-		}
-	}
+	if (use_load && norm)
+		normalize_load(nt);
 
 	groups = malloc(nmachines * sizeof(machine_task_group_t));
 	assert(groups != NULL);
