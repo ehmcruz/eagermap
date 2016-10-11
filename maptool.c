@@ -461,53 +461,84 @@ static void normalize_load (int nt)
 	}
 }
 
-static int get_topology_nobjs (topology_t *topo)
-{
-	int n, i, el;
-	
-	n = 1;
-	el = 1;
-	
-	for (i=0; i<topo->n_levels; i++) {
-		el *= topo->arities[i];
-		n += el;
-	}
-	
-	return n;
-}
-
 static void convert_topo_to_scotch_graph (char *fname)
 {
 	FILE *fp;
-	int i, nvertices, nedges;
+	int i, total_pus, nedges, j, k, comm;
+	
+	struct pu_machine_t {
+		int id;
+		int machine_id;
+		int pu_id_in_machine;
+	};
+	
+	struct pu_machine_t *pus;
 	
 	fp = fopen(fname, "w");
 	assert(fp != NULL);
 	
 	fprintf(fp, "0\n");
 	
-	nvertices = 0;
+	total_pus = 0;
 	
 	// 1 vertex per objects (root, cache, pu) of all machines
 	for (i=0; i<nmachines; i++)
-		nvertices += get_topology_nobjs(&machines[i].topology);
+		total_pus += machines[i].topology.pu_number;
+
+	printf("total_pus: %i\n", total_pus);
 	
-	nedges = 0;
+	pus = malloc(total_pus * sizeof(struct pu_machine_t));
+	assert(pus != NULL);
 	
-	// edges for the trees representing each machine
-	for (i=0; i<nmachines; i++)
-		nedges += get_topology_nobjs(&machines[i].topology) - 1;
+	// an edge per pair of pu
+	nedges = total_pus * (total_pus-1);
 	
-	fprintf(fp, "%i %i\n", nvertices, nedges);
+	printf("nedges: %i\n", nedges);
+	
+	fprintf(fp, "%i %i\n", total_pus, nedges);
 
 	fprintf(fp, "0 010\n");
 	
+	k = 0;
+	for (i=0; i<nmachines; i++) {
+		for (j=0; j<machines[i].topology.pu_number; j++) {
+			pus[k].id = k;
+			pus[k].machine_id = i;
+			pus[k].pu_id_in_machine = j;
+			k++;
+		}
+	}
+	
+	assert(k == total_pus);
+	
+	for (i=0; i<total_pus; i++) {
+		fprintf(fp, "%i", total_pus-1);
+		
+		for (j=0; j<total_pus; j++) {
+			if (i != j) {
+/*printf("i %i pus[i].machine_id %i pus[i].pu_id_in_machine %i |   j %i pus[j].machine_id %i pus[j].pu_id_in_machine %i\n", i, pus[i].machine_id, pus[i].pu_id_in_machine, j, pus[j].machine_id, pus[j].pu_id_in_machine);*/
+				if (pus[i].machine_id == pus[j].machine_id)
+					comm = libmapping_topology_dist_pus(&machines[pus[i].machine_id].topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
+				else
+					comm = 100;
+			
+				fprintf(fp, " %i %i", comm, j);
+			}
+		}
+		
+		fprintf(fp, "\n");
+	}
+	
+	free(pus);
+	
 	fclose(fp);
+	
+	printf("scotch topology printed in file %s\n", fname);
 }
 
 static void display_usage (int argc, char **argv)
 {
-	printf("Usage: %s csv_file machine_file [load_file] [-norm]\n", argv[0]);
+	printf("Usage: %s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch]\n", argv[0]);
 	exit(1);
 }
 
@@ -528,17 +559,22 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map;
-	int norm, args_normal;
+	int norm, args_normal, print_scotch;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
 
 	use_load = 0;
 	norm = 0;
 	args_normal = 0;
+	print_scotch = 0;
 
 	for (i=1; i<argc; i++) {
 		if (argv[i][0] == '-') {
-			if (argv[i][1] == 'n' && args_normal == 0) { // automatically generate nearest neightbor matrix
+			if (!strcmp(argv[i], "-norm"))
+				norm = 1;
+			else if (!strcmp(argv[i], "-pscotch"))
+				print_scotch = 1;
+			else if (argv[i][1] == 'n' && args_normal == 0) { // automatically generate nearest neightbor matrix
 				char *number, *s;
 				int error = 0;
 				
@@ -580,8 +616,6 @@ int main(int argc, char **argv)
 				
 				args_normal++;
 			}
-			else if (!strcmp(argv[i], "-norm"))
-				norm = 1;
 			else
 				display_usage(argc, argv);
 		}
@@ -707,6 +741,13 @@ int main(int argc, char **argv)
 /*nt=128;*/
 
 	network_floyd_warshall(machines, nmachines);
+	
+	if (print_scotch) {
+		printf("print scotch mode\n");
+		convert_topo_to_scotch_graph("scotch-topology.grf");
+		
+		return 0;
+	}
 	
 	init.nt = nt;
 	

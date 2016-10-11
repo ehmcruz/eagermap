@@ -136,7 +136,7 @@ static vertex_t* create_fake_topology (topology_t *topology, uint32_t level, uin
 			link = create_fake_topology(topology, level+1, arities+1, nlevels-1, pus, (weights == NULL) ? NULL : weights+1, numa_node);
 			e = libmapping_graph_connect_vertices(&topology->graph, v, link);
 			if (weights == NULL)
-				e->weight = 1 << (nlevels);
+				e->weight = 1; // << (nlevels);
 			else
 				e->weight = *weights;
 			e->type = GRAPH_ELTYPE_UNDEFINED;
