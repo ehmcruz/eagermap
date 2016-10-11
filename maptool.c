@@ -461,13 +461,46 @@ static void normalize_load (int nt)
 	}
 }
 
+static int get_topology_nobjs (topology_t *topo)
+{
+	int n, i, el;
+	
+	n = 1;
+	el = 1;
+	
+	for (i=0; i<topo->n_levels; i++) {
+		el *= topo->arities[i];
+		n += el;
+	}
+	
+	return n;
+}
+
 static void convert_topo_to_scotch_graph (char *fname)
 {
 	FILE *fp;
+	int i, nvertices, nedges;
 	
 	fp = fopen(fname, "w");
 	assert(fp != NULL);
 	
+	fprintf(fp, "0\n");
+	
+	nvertices = 0;
+	
+	// 1 vertex per objects (root, cache, pu) of all machines
+	for (i=0; i<nmachines; i++)
+		nvertices += get_topology_nobjs(&machines[i].topology);
+	
+	nedges = 0;
+	
+	// edges for the trees representing each machine
+	for (i=0; i<nmachines; i++)
+		nedges += get_topology_nobjs(&machines[i].topology) - 1;
+	
+	fprintf(fp, "%i %i\n", nvertices, nedges);
+
+	fprintf(fp, "0 010\n");
 	
 	fclose(fp);
 }
