@@ -536,6 +536,40 @@ static void convert_topo_to_scotch_graph (char *fname)
 	printf("scotch topology printed in file %s\n", fname);
 }
 
+static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
+{
+	FILE *fp;
+	int nedges, i, j;
+	
+	fp = fopen(fname, "w");
+	assert(fp != NULL);
+	
+	fprintf(fp, "0\n");
+
+	// an edge per pair of pu
+	nedges = m->nthreads * (m->nthreads-1);
+	
+	printf("nthreads: %i\n", m->nthreads);
+	printf("nedges: %i\n", nedges);
+
+	fprintf(fp, "%u %i\n", m->nthreads, nedges);
+
+	fprintf(fp, "0 010\n");
+
+	for (i=0; i<m->nthreads; i++) {
+		fprintf(fp, "%u", m->nthreads - 1);
+
+		for (j=0; j<m->nthreads; j++) {
+			if (j != i)
+				fprintf(fp, " %llu %i", comm_matrix_ptr_el(m, i, j), j);
+		}
+
+		fprintf(fp, "\n");
+	}
+
+	fclose(fp);
+}
+
 static void display_usage (int argc, char **argv)
 {
 	printf("Usage: %s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch]\n", argv[0]);
@@ -745,6 +779,7 @@ int main(int argc, char **argv)
 	if (print_scotch) {
 		printf("print scotch mode\n");
 		convert_topo_to_scotch_graph("scotch-topology.grf");
+		convert_matrix_to_scotch_graph(&m, "scotch-comm-matrix.grf");
 		
 		return 0;
 	}
