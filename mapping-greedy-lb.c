@@ -417,7 +417,7 @@ void libmapping_mapping_algorithm_greedy_lb_map (thread_map_alg_map_t *data)
 		libmapping_print_matrix(m, stdout);
 	#endif
 
-		if (likely(i > 1))
+		if (likely(i > 1) && data->m_init->nthreads > hardware_topology->pu_number)
 			ngroups = generate_groups(m, nelements, i);
 		else
 			ngroups = generate_groups_for_pu(m, nelements, i);

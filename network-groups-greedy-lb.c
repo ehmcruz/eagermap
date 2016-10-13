@@ -25,6 +25,56 @@ static void balance_load (machine_task_group_t *gh, machine_task_group_t *gl, do
 /*	}*/
 }
 
+static void balance_load_remove_free_pu (machine_task_group_t *groups, double *loads, uint32_t nmachines)
+{
+	int i, taskh, h;
+	machine_task_group_t *gl, *gh;
+	
+	do {
+		gl = NULL;
+		
+		for (i=0; i<nmachines; i++) {
+			if (groups[i].ntasks < groups[i].npus) {
+				gl = &groups[i];
+				break;
+			}
+		}
+		
+		if (gl == NULL)
+			return;
+		
+		gh = NULL;
+	
+		for (i=0; i<nmachines; i++) {
+			if (groups[i].ntasks > groups[i].npus && (gh == NULL || groups[i].load > gh->load))
+				gh = &groups[i];
+		}
+		
+		if (gh == NULL)
+			return;
+		
+		taskh = -1;
+		for (i=0; i<gh->ntasks; i++) {
+			if (taskh == -1 || loads[ gh->tasks[i] ] < loads[ taskh ]) {
+				taskh = gh->tasks[i];
+				h = i;
+			}
+		}
+		
+		if (taskh != -1) {
+			printf("sent task %i(%.3f) to group %i\n", taskh, loads[taskh], gl->id);
+	
+			gh->tasks[h] = gh->tasks[ gh->ntasks-1 ];
+			gh->load -= loads[taskh];
+			gh->ntasks--;
+		
+			gl->tasks[ gl->ntasks ] = taskh;
+			gl->load += loads[taskh];
+			gl->ntasks++;
+		}
+	} while (gl != NULL);
+}
+
 static int balance_load_high_to_low (machine_task_group_t *groups, double *loads, uint32_t nmachines)
 {
 	int i, taskh, h;
@@ -224,6 +274,9 @@ void network_generate_groups_load (comm_matrix_t *m, uint32_t ntasks, machine_ta
 	
 	for (i=0; i<nmachines*nmachines; i++)
 		balance_load_high_to_low(groups, loads, nmachines);
+		
+	if (ntasks > nmachines)
+		balance_load_remove_free_pu(groups, loads, nmachines);
 	
 	network_create_comm_matrices(m, groups, nmachines);
 }
