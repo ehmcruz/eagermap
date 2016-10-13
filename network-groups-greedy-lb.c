@@ -25,6 +25,53 @@ static void balance_load (machine_task_group_t *gh, machine_task_group_t *gl, do
 /*	}*/
 }
 
+static int balance_load_high_to_low (machine_task_group_t *groups, double *loads, uint32_t nmachines)
+{
+	int i, taskh, h;
+	machine_task_group_t *gh, *gl;
+	
+	gh = &groups[0];
+	gl = &groups[0];
+	
+	for (i=1; i<nmachines; i++) {
+		if (groups[i].load > gh->load)
+			gh = &groups[i];
+		if (groups[i].load < gl->load)
+			gl = &groups[i];
+	}
+	
+	if (gh == gl)
+		return 0;
+	
+	if (gh->ntasks < 2)
+		return 0;
+	
+	taskh = -1;
+	for (i=0; i<gh->ntasks; i++) {
+		if (taskh == -1 || loads[ gh->tasks[i] ] < loads[ taskh ]) {
+			taskh = gh->tasks[i];
+			h = i;
+		}
+	}
+	
+	if (taskh != -1) {
+		printf("sent task %i(%.3f) to group %i\n", taskh, loads[taskh], gl->id);
+	
+		gh->tasks[h] = gh->tasks[ gh->ntasks-1 ];
+		gh->load -= loads[taskh];
+		gh->ntasks--;
+		
+		gl->tasks[ gl->ntasks ] = taskh;
+		gl->load += loads[taskh];
+		gl->ntasks++;
+		
+		return 1;
+	}
+
+	
+	return 0;
+}
+
 static int balance_load_exchange (machine_task_group_t *gh, machine_task_group_t *gl, double *loads)
 {
 	int i, h, l, highest, taskh, taskl;
@@ -170,8 +217,13 @@ void network_generate_groups_load (comm_matrix_t *m, uint32_t ntasks, machine_ta
 	}
 	network_generate_last_group(m, ntasks, chosen, &groups[nmachines-1], loads);
 
-	for (i=0, j=nmachines-1; i<j; i++, j--)
-		balance_load_exchange(&groups[i], &groups[j], loads);
+/*	for (k=0; k<5; k++) {*/
+		for (i=0, j=nmachines-1; i<j; i++, j--)
+			balance_load_exchange(&groups[i], &groups[j], loads);
+/*	}*/
+	
+	for (i=0; i<nmachines*nmachines; i++)
+		balance_load_high_to_low(groups, loads, nmachines);
 	
 	network_create_comm_matrices(m, groups, nmachines);
 }
