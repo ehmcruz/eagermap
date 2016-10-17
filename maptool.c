@@ -16,6 +16,15 @@ typedef struct map_t {
 	uint32_t pu;
 } map_t;
 
+typedef struct pu_machine_t {
+	int id;
+	machine_t *machine;
+	int pu_id_in_machine;
+} pu_machine_t;
+
+static pu_machine_t *pus;
+static int total_pus;
+
 static machine_t *machines = NULL;
 static machine_task_group_t *groups;
 static int nmachines = 0;
@@ -464,32 +473,14 @@ static void normalize_load (int nt)
 static void convert_topo_to_scotch_graph (char *fname)
 {
 	FILE *fp;
-	int i, total_pus, nedges, j, k, comm;
-	
-	struct pu_machine_t {
-		int id;
-		int machine_id;
-		int pu_id_in_machine;
-	};
-	
-	struct pu_machine_t *pus;
-	
+	int i, nedges, j, comm;
+		
 	fp = fopen(fname, "w");
 	assert(fp != NULL);
 	
 	fprintf(fp, "0\n");
 	
-	total_pus = 0;
-	
 	// 1 vertex per objects (root, cache, pu) of all machines
-	for (i=0; i<nmachines; i++)
-		total_pus += machines[i].topology.pu_number;
-
-	printf("total_pus: %i\n", total_pus);
-	
-	pus = malloc(total_pus * sizeof(struct pu_machine_t));
-	assert(pus != NULL);
-	
 	// an edge per pair of pu
 	nedges = total_pus * (total_pus-1);
 	
@@ -498,27 +489,15 @@ static void convert_topo_to_scotch_graph (char *fname)
 	fprintf(fp, "%i %i\n", total_pus, nedges);
 
 	fprintf(fp, "0 010\n");
-	
-	k = 0;
-	for (i=0; i<nmachines; i++) {
-		for (j=0; j<machines[i].topology.pu_number; j++) {
-			pus[k].id = k;
-			pus[k].machine_id = i;
-			pus[k].pu_id_in_machine = j;
-			k++;
-		}
-	}
-	
-	assert(k == total_pus);
-	
+		
 	for (i=0; i<total_pus; i++) {
 		fprintf(fp, "%i", total_pus-1);
 		
 		for (j=0; j<total_pus; j++) {
 			if (i != j) {
 /*printf("i %i pus[i].machine_id %i pus[i].pu_id_in_machine %i |   j %i pus[j].machine_id %i pus[j].pu_id_in_machine %i\n", i, pus[i].machine_id, pus[i].pu_id_in_machine, j, pus[j].machine_id, pus[j].pu_id_in_machine);*/
-				if (pus[i].machine_id == pus[j].machine_id)
-					comm = libmapping_topology_dist_pus(&machines[pus[i].machine_id].topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
+				if (pus[i].machine->id == pus[j].machine->id)
+					comm = libmapping_topology_dist_pus(&pus[i].machine->topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
 				else
 					comm = 100;
 			
@@ -528,9 +507,7 @@ static void convert_topo_to_scotch_graph (char *fname)
 		
 		fprintf(fp, "\n");
 	}
-	
-	free(pus);
-	
+		
 	fclose(fp);
 	
 	printf("scotch topology printed in file %s\n", fname);
@@ -568,6 +545,8 @@ static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 	}
 
 	fclose(fp);
+	
+	printf("scotch comm matrix printed in file %s\n", fname);
 }
 
 static void display_usage (int argc, char **argv)
@@ -773,6 +752,28 @@ int main(int argc, char **argv)
 		groups[i].npus = machine->topology.pu_number;
 	}
 /*nt=128;*/
+
+	total_pus = 0;
+	
+	for (i=0; i<nmachines; i++)
+		total_pus += machines[i].topology.pu_number;
+
+	printf("total_pus: %i\n", total_pus);
+	
+	pus = malloc(total_pus * sizeof(struct pu_machine_t));
+	assert(pus != NULL);
+	
+	k = 0;
+	for (i=0; i<nmachines; i++) {
+		for (j=0; j<machines[i].topology.pu_number; j++) {
+			pus[k].id = k;
+			pus[k].machine = &machines[i];
+			pus[k].pu_id_in_machine = j;
+			k++;
+		}
+	}
+	
+	assert(k == total_pus);
 
 	network_floyd_warshall(machines, nmachines);
 	
