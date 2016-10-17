@@ -440,6 +440,29 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 	}
 }
 
+static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t *nt_)
+{
+	map_t *map;
+	int i, nt;
+	char *s, *p;
+	char NUMBER[100];
+	uint64_t v;
+	
+	printf("parsing scotch map...\n");
+
+	s = buffer;
+
+	READ_INT(v)
+	nt = v;
+	*nt_ = nt;
+	
+	printf("number of threads: %i\n", nt);
+	
+	SKIP_NEWLINE
+	
+	return map;
+}
+
 static void generate_full_load (int nt)
 {
 	int i;
@@ -551,7 +574,9 @@ static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 
 static void display_usage (int argc, char **argv)
 {
-	printf("Usage: %s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch]\n", argv[0]);
+	printf("Usage:\n");
+	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch]\n", argv[0]);
+	printf("\t%s -mscotch scotch_map_file\n", argv[0]);
 	exit(1);
 }
 
@@ -581,12 +606,51 @@ int main(int argc, char **argv)
 	args_normal = 0;
 	print_scotch = 0;
 
-	for (i=1; i<argc; i++) {
+	i = 1;
+	while (i < argc) {
 		if (argv[i][0] == '-') {
-			if (!strcmp(argv[i], "-norm"))
+			if (!strcmp(argv[i], "-norm")) {
 				norm = 1;
-			else if (!strcmp(argv[i], "-pscotch"))
+				i++;
+			}
+			else if (!strcmp(argv[i], "-pscotch")) {
 				print_scotch = 1;
+				i++;
+			}
+			else if (!strcmp(argv[i], "-mscotch")) {
+				char *fname;
+				
+				i++;
+				
+				if (i == argc || argv[i][0] == '-') {
+					printf("need scotch mapping file after -mscotch\n");
+					display_usage(argc, argv);
+				}
+				
+				fname = argv[i];
+				
+				printf("evaluate scotch mapping %s\n", fname);
+				
+				fp = fopen(fname, "r");
+				assert(fp != NULL);
+				fseek(fp, 0, SEEK_END);
+				fsize = ftell(fp);
+				buffer = (char*)malloc(fsize+1);
+				assert(buffer != NULL);
+				rewind(fp);
+				assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+				fclose(fp);
+				buffer[fsize] = 0;
+
+				map = parse_scotch_map(buffer, fsize, &nt);
+				free(buffer);
+				
+				LM_ASSERT(nt <= MAX_THREADS)
+				
+				exit(0);
+				
+				i++;
+			}
 			else if (argv[i][1] == 'n' && args_normal == 0) { // automatically generate nearest neightbor matrix
 				char *number, *s;
 				int error = 0;
@@ -621,6 +685,7 @@ int main(int argc, char **argv)
 				generate_nn_matrix(nt, &m);
 				
 				args_normal++;
+				i++;
 			}
 			else if (argv[i][1] == 'f' && args_normal == 2) { // automatically generate full load
 				printf("autogen full load\n");
@@ -628,6 +693,7 @@ int main(int argc, char **argv)
 				generate_full_load(nt);
 				
 				args_normal++;
+				i++;
 			}
 			else
 				display_usage(argc, argv);
@@ -655,6 +721,7 @@ int main(int argc, char **argv)
 				LM_ASSERT(nt <= MAX_THREADS)
 				
 				args_normal++;
+				i++;
 			}
 			else if (args_normal == 1) { // parse topo
 				fname_topo = argv[i];
@@ -675,6 +742,7 @@ int main(int argc, char **argv)
 				free(buffer);
 				
 				args_normal++;
+				i++;
 			}
 			else if (args_normal == 2) { // parse load
 				fname_load = argv[i];
@@ -698,6 +766,7 @@ int main(int argc, char **argv)
 				free(buffer);
 				
 				args_normal++;
+				i++;
 			}
 			else
 				display_usage(argc, argv);
