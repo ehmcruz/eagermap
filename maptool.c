@@ -11,6 +11,8 @@
 
 #define ENABLE_LOAD_BALANCE
 
+#define DIST_DIFFERENT_MACHINES 100
+
 typedef struct map_t {
 	machine_t *machine;
 	uint32_t pu;
@@ -105,7 +107,10 @@ machine_t* get_machine_by_name (char *name)
 	}
 
 #define SKIP_NEWLINE \
-	assert(*s == '\n');\
+	if (*s != '\n') {\
+		printf("faltou newline\n");\
+		assert(0);\
+	}\
 	INCS
 
 #define SKIP_COMMA \
@@ -440,10 +445,10 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 	}
 }
 
-static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t *nt_)
+static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t nt)
 {
 	map_t *map;
-	int i, nt;
+	int i, task, pu;
 	char *s, *p;
 	char NUMBER[100];
 	uint64_t v;
@@ -453,12 +458,40 @@ static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t *nt_)
 	s = buffer;
 
 	READ_INT(v)
-	nt = v;
-	*nt_ = nt;
-	
-	printf("number of threads: %i\n", nt);
-	
 	SKIP_NEWLINE
+	
+	if (nt != (uint32_t)v) {
+		printf("error: the number of tasks in scotch map (%i) is different from the number of tasks of the comm matrix (%i)\n", (uint32_t)v, nt);
+		exit(1);
+	}
+
+	
+	printf("scotch number of threads: %i\n", nt);
+	
+	map = malloc(sizeof(map_t) * nt);
+	assert(map != NULL);
+	
+	for (i=0; i<nt; i++) {
+		READ_INT(v)
+		task = v;
+		
+		FORCE_SKIP_SPACE
+		
+		READ_INT(v)
+		pu = v;
+		
+		SKIP_NEWLINE
+		
+		if (pu >= total_pus) {
+			printf("the pu id %i in scotch map file in task %i is higher than he total number of pus in the system (%u)\n", pu, task, total_pus);
+			exit(1);
+		}
+		
+		map[task].machine = pus[pu].machine;
+		map[task].pu = pus[pu].pu_id_in_machine;
+		
+		printf("scotch map task %i on machine %s pu %i\n", task, map[task].machine->name, map[task].pu);
+	}
 	
 	return map;
 }
@@ -522,7 +555,7 @@ static void convert_topo_to_scotch_graph (char *fname)
 				if (pus[i].machine->id == pus[j].machine->id)
 					comm = libmapping_topology_dist_pus(&pus[i].machine->topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
 				else
-					comm = 100;
+					comm = DIST_DIFFERENT_MACHINES;
 			
 				fprintf(fp, " %i %i", comm, j);
 			}
@@ -572,11 +605,28 @@ static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 	printf("scotch comm matrix printed in file %s\n", fname);
 }
 
+static double gen_map_quality (comm_matrix_t *m, map_t *map, uint32_t nt)
+{
+	double quality, dist;
+#if 0
+	quality = 0.0;
+	for (i=0; i<nt-1; i++) {
+		for (j=i+1; j<nt; j++) {
+			if (pus[i].machine->id == pus[j].machine->id)
+				dist = (double)libmapping_topology_dist_pus(&pus[i].machine->topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
+			else
+				comm = DIST_DIFFERENT_MACHINES;
+			quality += (double)comm_matrix_el(m, i, j) / (libmapping_topology_dist_pus(topology, map[i], map[j]) + 1.0);
+		}
+	}
+#endif
+	return quality;
+}
+
 static void display_usage (int argc, char **argv)
 {
 	printf("Usage:\n");
-	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch]\n", argv[0]);
-	printf("\t%s -mscotch scotch_map_file\n", argv[0]);
+	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch] [-mscotch scotch_map_file]\n", argv[0]);
 	exit(1);
 }
 
@@ -588,7 +638,7 @@ int main(int argc, char **argv)
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
 	FILE *fp;
-	char *buffer, *fname_csv, *fname_load, *fname_topo;
+	char *buffer, *fname_csv, *fname_load, *fname_topo, *fname_scotch_map;
 	struct timeval timer_begin, timer_end;
 	double elapsed;
 	double quality;
@@ -596,8 +646,8 @@ int main(int argc, char **argv)
 	thread_map_alg_map_t mapdata;
 	machine_t *machine;
 	thread_map_alg_init_t init;
-	map_t *map;
-	int norm, args_normal, print_scotch;
+	map_t *map, *scotch_map;
+	int norm, args_normal, print_scotch, eval_scotch_map;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
 
@@ -605,6 +655,7 @@ int main(int argc, char **argv)
 	norm = 0;
 	args_normal = 0;
 	print_scotch = 0;
+	eval_scotch_map = 0;
 
 	i = 1;
 	while (i < argc) {
@@ -618,8 +669,6 @@ int main(int argc, char **argv)
 				i++;
 			}
 			else if (!strcmp(argv[i], "-mscotch")) {
-				char *fname;
-				
 				i++;
 				
 				if (i == argc || argv[i][0] == '-') {
@@ -627,27 +676,9 @@ int main(int argc, char **argv)
 					display_usage(argc, argv);
 				}
 				
-				fname = argv[i];
+				fname_scotch_map = argv[i];
 				
-				printf("evaluate scotch mapping %s\n", fname);
-				
-				fp = fopen(fname, "r");
-				assert(fp != NULL);
-				fseek(fp, 0, SEEK_END);
-				fsize = ftell(fp);
-				buffer = (char*)malloc(fsize+1);
-				assert(buffer != NULL);
-				rewind(fp);
-				assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
-				fclose(fp);
-				buffer[fsize] = 0;
-
-				map = parse_scotch_map(buffer, fsize, &nt);
-				free(buffer);
-				
-				LM_ASSERT(nt <= MAX_THREADS)
-				
-				exit(0);
+				eval_scotch_map = 1;
 				
 				i++;
 			}
@@ -851,6 +882,26 @@ int main(int argc, char **argv)
 		convert_topo_to_scotch_graph("scotch-topology.grf");
 		convert_matrix_to_scotch_graph(&m, "scotch-comm-matrix.grf");
 		
+		return 0;
+	}
+	
+	if (eval_scotch_map) {
+		printf("evaluate scotch mapping %s\n", fname_scotch_map);
+		
+		fp = fopen(fname_scotch_map, "r");
+		assert(fp != NULL);
+		fseek(fp, 0, SEEK_END);
+		fsize = ftell(fp);
+		buffer = (char*)malloc(fsize+1);
+		assert(buffer != NULL);
+		rewind(fp);
+		assert( fread(buffer, sizeof(char), fsize, fp) == fsize );
+		fclose(fp);
+		buffer[fsize] = 0;
+
+		scotch_map = parse_scotch_map(buffer, fsize, nt);
+		free(buffer);
+				
 		return 0;
 	}
 	
