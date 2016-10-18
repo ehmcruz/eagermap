@@ -586,9 +586,18 @@ static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 
 	fprintf(fp, "%u %i\n", m->nthreads, nedges);
 
-	fprintf(fp, "0 010\n");
+	if (provided_load)
+		fprintf(fp, "0 011\n");
+	else
+		fprintf(fp, "0 010\n");
 
 	for (i=0; i<m->nthreads; i++) {
+		if (provided_load) {
+			uint64_t task_load;
+			task_load = (uint64_t)(loads[i] * 1000.0);
+			fprintf(fp, "%llu ", task_load);
+		}
+		
 		fprintf(fp, "%u", m->nthreads - 1);
 
 		for (j=0; j<m->nthreads; j++) {
@@ -975,6 +984,17 @@ int main(int argc, char **argv)
 
 		parse_scotch_map(buffer, fsize, map, nt);
 		free(buffer);
+		
+		for (i=0; i<nmachines; i++) {
+			machines[i].ntasks = 0;
+			machines[i].tasks = groups[i].tasks;
+		}
+		
+		for (i=0; i<nt; i++) {
+			machine = &machines[ map[i].machine->id ];
+			machine->tasks[ machine->ntasks ] = i;
+			machine->ntasks++;
+		}
 	}
 	else if (random_mapping) {
 		printf("using random mapping\n");
@@ -982,6 +1002,17 @@ int main(int argc, char **argv)
 		gettimeofday(&timer_begin, NULL);
 		generate_random_mapping(map, nt);
 		gettimeofday(&timer_end, NULL);
+		
+		for (i=0; i<nmachines; i++) {
+			machines[i].ntasks = 0;
+			machines[i].tasks = groups[i].tasks;
+		}
+		
+		for (i=0; i<nt; i++) {
+			machine = &machines[ map[i].machine->id ];
+			machine->tasks[ machine->ntasks ] = i;
+			machine->ntasks++;
+		}
 	}
 	else {	
 		init.nt = nt;
@@ -1082,33 +1113,33 @@ int main(int argc, char **argv)
 		for (i=0; i<nt; i++) {
 			assert(map[i].machine != NULL);
 		}
+	}
 
-		if (provided_load) {
-			printf("loads per machine:\n");
+	if (provided_load) {
+		printf("loads per machine:\n");
 
-			for (i=0; i<nmachines; i++) {
-				machine_load = 0.0;
-				for (j=0; j<machines[i].ntasks; j++)
-					machine_load += loads[ machines[i].tasks[j] ];
-				printf("%s (%.3f): ", machines[i].name, machine_load);
+		for (i=0; i<nmachines; i++) {
+			machine_load = 0.0;
+			for (j=0; j<machines[i].ntasks; j++)
+				machine_load += loads[ machines[i].tasks[j] ];
+			printf("%s (%.3f): ", machines[i].name, machine_load);
 
-	/*			machine_load = 0.0;*/
-				for (j=0; j<machines[i].topology.pu_number; j++) {
-					pu_load = 0.0;
+/*			machine_load = 0.0;*/
+			for (j=0; j<machines[i].topology.pu_number; j++) {
+				pu_load = 0.0;
 
-					for (k=0; k<machines[i].ntasks; k++) {
-						if (machines[i].map[k] == j)
-							pu_load += loads[ machines[i].tasks[k] ];
-					}
-
-					printf("%.3f ", pu_load);
-
-	/*				machine_load += pu_load;*/
+				for (k=0; k<machines[i].ntasks; k++) {
+					if (machines[i].map[k] == j)
+						pu_load += loads[ machines[i].tasks[k] ];
 				}
 
-	/*			printf("--> %.3f", machine_load);*/
-				printf("\n");
+				printf("%.3f ", pu_load);
+
+/*				machine_load += pu_load;*/
 			}
+
+/*			printf("--> %.3f", machine_load);*/
+			printf("\n");
 		}
 	}
 	
