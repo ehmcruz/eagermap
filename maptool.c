@@ -893,7 +893,7 @@ int main(int argc, char **argv)
 	else
 		printf("do not balance the load\n");
 
-	if (use_load && norm)
+	if (provided_load && norm)
 		normalize_load(nt);
 
 	groups = malloc(nmachines * sizeof(machine_task_group_t));
