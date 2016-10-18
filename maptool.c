@@ -685,7 +685,7 @@ static void print_mapping (map_t *map, uint32_t nt)
 static void display_usage (int argc, char **argv)
 {
 	printf("Usage:\n");
-	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch] [-mscotch scotch_map_file] [-rand]\n", argv[0]);
+	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch] [-mscotch scotch_map_file] [-rand] [-load]\n", argv[0]);
 	exit(1);
 }
 
