@@ -33,6 +33,7 @@ static machine_t *machines = NULL;
 static machine_task_group_t *groups;
 static int nmachines = 0;
 static int use_load;
+static int provided_load;
 static double *loads = NULL;
 
 static comm_matrix_t m;
@@ -707,6 +708,7 @@ int main(int argc, char **argv)
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
 
+	provided_load = 0;
 	use_load = 0;
 	norm = 0;
 	args_normal = 0;
@@ -723,6 +725,10 @@ int main(int argc, char **argv)
 			}
 			else if (!strcmp(argv[i], "-pscotch")) {
 				print_scotch = 1;
+				i++;
+			}
+			else if (!strcmp(argv[i], "-load")) {
+				use_load = 1;
 				i++;
 			}
 			else if (!strcmp(argv[i], "-rand")) {
@@ -781,7 +787,7 @@ int main(int argc, char **argv)
 			}
 			else if (argv[i][1] == 'f' && args_normal == 2) { // automatically generate full load
 				printf("autogen full load\n");
-				use_load = 1;
+				provided_load = 1;
 				generate_full_load(nt);
 				
 				args_normal++;
@@ -841,7 +847,7 @@ int main(int argc, char **argv)
 				
 				printf("load input file: %s\n", fname_load);
 				
-				use_load = 1;
+				provided_load = 1;
 				
 				fp = fopen(fname_load, "r");
 				assert(fp != NULL);
@@ -867,8 +873,15 @@ int main(int argc, char **argv)
 	
 	if (args_normal < 2)
 		display_usage(argc, argv);
+	
+	if (use_load && !provided_load) {
+		printf("error! given -load, but load file not provided\n");
+		display_usage(argc, argv);
+	}
 
-	if (!use_load)
+	if (use_load)
+		printf("balance the load\n");
+	else
 		printf("do not balance the load\n");
 
 	if (use_load && norm)
@@ -982,11 +995,7 @@ int main(int argc, char **argv)
 		else {
 			for (i=0; i<nmachines; i++) {
 				init.topology = &machines[i].topology;
-			#ifdef ENABLE_LOAD_BALANCE
 				libmapping_mapping_algorithm_greedy_lb_init(&init);
-			#else
-				libmapping_mapping_algorithm_greedy_init(&init);
-			#endif
 			}
 		}
 
@@ -1023,11 +1032,7 @@ int main(int argc, char **argv)
 			}
 		}
 		else {
-		#ifdef ENABLE_LOAD_BALANCE
 			network_generate_groups_load(&m, nt, groups, nmachines, loads);
-		#else
-			network_generate_groups(&m, nt, groups, nmachines);
-		#endif
 
 			network_map_groups_to_machines(groups, machines, nmachines);
 
@@ -1046,11 +1051,7 @@ int main(int argc, char **argv)
 				mapdata.map = machines[i].map;
 				mapdata.loads = loads;
 
-			#ifdef ENABLE_LOAD_BALANCE
 				libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
-			#else
-				libmapping_mapping_algorithm_greedy_map(&mapdata);
-			#endif
 			}
 		}
 
@@ -1082,7 +1083,7 @@ int main(int argc, char **argv)
 			assert(map[i].machine != NULL);
 		}
 
-		if (use_load) {
+		if (provided_load) {
 			printf("loads per machine:\n");
 
 			for (i=0; i<nmachines; i++) {
