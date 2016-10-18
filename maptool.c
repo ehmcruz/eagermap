@@ -12,17 +12,18 @@
 
 #define ENABLE_LOAD_BALANCE
 
-#define DIST_DIFFERENT_MACHINES 100
+#define DIST_DIFFERENT_MACHINES 1000
 
 typedef struct map_t {
 	machine_t *machine;
 	uint32_t pu;
+	uint32_t pu_pos;
 } map_t;
 
 typedef struct pu_machine_t {
 	int id;
 	machine_t *machine;
-	int pu_id_in_machine;
+	int pu_pos;
 } pu_machine_t;
 
 static pu_machine_t *pus;
@@ -33,6 +34,8 @@ static machine_task_group_t *groups;
 static int nmachines = 0;
 static int use_load;
 static double *loads = NULL;
+
+static comm_matrix_t m;
 
 machine_t* get_machine_by_name (char *name)
 {
@@ -446,9 +449,8 @@ static void parse_loads (char *buffer, uint32_t blen, int nt)
 	}
 }
 
-static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t nt)
+static void parse_scotch_map (char *buffer, uint32_t blen, map_t *map, uint32_t nt)
 {
-	map_t *map;
 	int i, task, pu;
 	char *s, *p;
 	char NUMBER[100];
@@ -465,12 +467,8 @@ static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t nt)
 		printf("error: the number of tasks in scotch map (%i) is different from the number of tasks of the comm matrix (%i)\n", (uint32_t)v, nt);
 		exit(1);
 	}
-
 	
 	printf("scotch number of threads: %i\n", nt);
-	
-	map = malloc(sizeof(map_t) * nt);
-	assert(map != NULL);
 	
 	for (i=0; i<nt; i++) {
 		READ_INT(v)
@@ -489,12 +487,11 @@ static map_t* parse_scotch_map (char *buffer, uint32_t blen, uint32_t nt)
 		}
 		
 		map[task].machine = pus[pu].machine;
-		map[task].pu = pus[pu].pu_id_in_machine;
+		map[task].pu_pos = pus[pu].pu_pos;
+		map[task].pu = pus[pu].machine->best_pus[ pus[pu].pu_pos ];
 		
 		printf("scotch map task %i on machine %s pu %i\n", task, map[task].machine->name, map[task].pu);
 	}
-	
-	return map;
 }
 
 static void generate_full_load (int nt)
@@ -552,9 +549,9 @@ static void convert_topo_to_scotch_graph (char *fname)
 		
 		for (j=0; j<total_pus; j++) {
 			if (i != j) {
-/*printf("i %i pus[i].machine_id %i pus[i].pu_id_in_machine %i |   j %i pus[j].machine_id %i pus[j].pu_id_in_machine %i\n", i, pus[i].machine_id, pus[i].pu_id_in_machine, j, pus[j].machine_id, pus[j].pu_id_in_machine);*/
+/*printf("i %i pus[i].machine_id %i pus[i].pu_pos %i |   j %i pus[j].machine_id %i pus[j].pu_pos %i\n", i, pus[i].machine_id, pus[i].pu_pos, j, pus[j].machine_id, pus[j].pu_pos);*/
 				if (pus[i].machine->id == pus[j].machine->id)
-					comm = libmapping_topology_dist_pus(&pus[i].machine->topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
+					comm = libmapping_topology_dist_pus(&pus[i].machine->topology, pus[i].pu_pos, pus[j].pu_pos);
 				else
 					comm = DIST_DIFFERENT_MACHINES;
 			
@@ -606,7 +603,7 @@ static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 	printf("scotch comm matrix printed in file %s\n", fname);
 }
 
-static double gen_map_quality (comm_matrix_t *m, map_t *map, int nt)
+static double gen_map_quality (map_t *map, int nt)
 {
 	double quality, dist;
 	int i, j;
@@ -616,11 +613,11 @@ static double gen_map_quality (comm_matrix_t *m, map_t *map, int nt)
 	for (i=0; i<nt-1; i++) {
 		for (j=i+1; j<nt; j++) {
 			if (map[i].machine == map[j].machine)
-				dist = (double)libmapping_topology_dist_pus(&map[i].machine->topology, map[i].pu, map[j].pu);
+				dist = (double)libmapping_topology_dist_pus(&map[i].machine->topology, map[i].pu_pos, map[j].pu_pos);
 			else
 				dist = (double)DIST_DIFFERENT_MACHINES;
-
-			quality += (double)comm_matrix_ptr_el(m, i, j) / (dist + 1.0);
+/*printf("tasks %i-%i comm %llu dist %.3f\n", i, j, comm_matrix_el(m, i, j), dist);getchar();*/
+			quality += (double)comm_matrix_el(m, i, j) / (dist + 1.0);
 		}
 	}
 
@@ -651,13 +648,37 @@ static void generate_random_mapping (map_t *map, uint32_t nt)
 		pu = avl[pos];
 		
 		map[i].machine = pus[pu].machine;
-		map[i].pu = pus[pu].pu_id_in_machine;
+		map[i].pu_pos = pus[pu].pu_pos;
+		map[i].pu = pus[pu].machine->best_pus[ pus[pu].pu_pos ];
 		
 		navl--;
 		avl[pos] = avl[navl];
 	}
 	
 	free(avl);
+}
+
+static void print_mapping (map_t *map, uint32_t nt)
+{
+	uint32_t i;
+	double quality;
+
+	for (i=0; i<nt; i++) {
+		printf("rank %i=%s slot=%i\n", i, map[i].machine->name, map[i].pu);
+	}
+
+	printf("single machine mapping: ");
+
+	for (i=0; i<nt; i++) {
+		printf("%i", map[i].pu);
+		if (i < (nt-1))
+			printf(",");
+	}
+
+	printf("\n");
+	
+	quality = gen_map_quality(map, nt);
+	printf("quality of mapping: %.3f\n", quality);
 }
 
 static void display_usage (int argc, char **argv)
@@ -669,8 +690,6 @@ static void display_usage (int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	static comm_matrix_t m;
-
 	uint32_t i, j, k, nt, fsize;
 	uint32_t nlevels=0, npus=0, nvertices=0, *threads_per_pu;
 	weight_t *weights=NULL;
@@ -683,7 +702,7 @@ int main(int argc, char **argv)
 	thread_map_alg_map_t mapdata;
 	machine_t *machine;
 	thread_map_alg_init_t init;
-	map_t *map, *scotch_map;
+	map_t *map;
 	int norm, args_normal, print_scotch, eval_scotch_map, random_mapping;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
@@ -910,7 +929,7 @@ int main(int argc, char **argv)
 		for (j=0; j<machines[i].topology.pu_number; j++) {
 			pus[k].id = k;
 			pus[k].machine = &machines[i];
-			pus[k].pu_id_in_machine = j;
+			pus[k].pu_pos = j;
 			k++;
 		}
 	}
@@ -941,13 +960,10 @@ int main(int argc, char **argv)
 		fclose(fp);
 		buffer[fsize] = 0;
 
-		scotch_map = parse_scotch_map(buffer, fsize, nt);
+		parse_scotch_map(buffer, fsize, map, nt);
 		free(buffer);
-				
-		return 0;
 	}
-	
-	if (random_mapping) {
+	else if (random_mapping) {
 		printf("using random mapping\n");
 		
 		gettimeofday(&timer_begin, NULL);
@@ -1058,6 +1074,7 @@ int main(int argc, char **argv)
 	/*			printf("i %i, j %i, machines[i].map[j] %i\n", i, j, machines[i].map[j]);*/
 				map[ machines[i].tasks[j] ].machine = &machines[i];
 				map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
+				map[ machines[i].tasks[j] ].pu_pos = machines[i].map[j];
 			}
 		}
 
@@ -1093,20 +1110,8 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-
-	for (i=0; i<nt; i++) {
-		printf("rank %i=%s slot=%i\n", i, map[i].machine->name, map[i].pu);
-	}
-
-	printf("single machine mapping: ");
-
-	for (i=0; i<nt; i++) {
-		printf("%i", map[i].pu);
-		if (i < (nt-1))
-			printf(",");
-	}
-
-	printf("\n");
+	
+	print_mapping(map, nt);
 
 	elapsed = timer_end.tv_sec - timer_begin.tv_sec + (timer_end.tv_usec - timer_begin.tv_usec) / 1000000.0;
 	printf("mapping time: %.5f s\n", elapsed);

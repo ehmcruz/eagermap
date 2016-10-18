@@ -67,4 +67,6 @@ char* libmapping_strtok(char *str, char *tok, char del, uint32_t bsize);
 
 uint8_t libmapping_env_get_integer(char *envname, int32_t *value);
 
+uint64_t int_pow (uint64_t base, uint32_t exp);
+
 #endif

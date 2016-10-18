@@ -87,3 +87,12 @@ uint8_t libmapping_env_get_integer(char *envname, int32_t *value)
 	return 1;
 }
 
+uint64_t int_pow (uint64_t base, uint32_t exp)
+{
+	uint32_t i;
+	uint64_t r = 1;
+	for (i=0; i<exp; i++)
+		r *= base;
+	return r;
+}
+
