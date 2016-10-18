@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include <ctype.h>
 #include <string.h>
+#include <time.h>
 
 #include "libmapping.h"
 
@@ -605,28 +606,64 @@ static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 	printf("scotch comm matrix printed in file %s\n", fname);
 }
 
-static double gen_map_quality (comm_matrix_t *m, map_t *map, uint32_t nt)
+static double gen_map_quality (comm_matrix_t *m, map_t *map, int nt)
 {
 	double quality, dist;
-#if 0
+	int i, j;
+
 	quality = 0.0;
+
 	for (i=0; i<nt-1; i++) {
 		for (j=i+1; j<nt; j++) {
-			if (pus[i].machine->id == pus[j].machine->id)
-				dist = (double)libmapping_topology_dist_pus(&pus[i].machine->topology, pus[i].pu_id_in_machine, pus[j].pu_id_in_machine);
+			if (map[i].machine == map[j].machine)
+				dist = (double)libmapping_topology_dist_pus(&map[i].machine->topology, map[i].pu, map[j].pu);
 			else
-				comm = DIST_DIFFERENT_MACHINES;
-			quality += (double)comm_matrix_el(m, i, j) / (libmapping_topology_dist_pus(topology, map[i], map[j]) + 1.0);
+				dist = (double)DIST_DIFFERENT_MACHINES;
+
+			quality += (double)comm_matrix_ptr_el(m, i, j) / (dist + 1.0);
 		}
 	}
-#endif
+
 	return quality;
+}
+
+static void generate_random_mapping (map_t *map, uint32_t nt)
+{
+	uint32_t i, j;
+	int *avl, navl, pu, pos;
+	
+	srand(time(NULL));
+	
+	avl = malloc(total_pus * sizeof(int));
+	assert(avl != NULL);
+	
+	navl = 0;
+	
+	for (i=0; i<nt; i++) {
+		if (!navl) {
+			navl = total_pus;
+			
+			for (j=0; j<total_pus; j++)
+				avl[j] = j;
+		}
+		
+		pos = rand() % navl;
+		pu = avl[pos];
+		
+		map[i].machine = pus[pu].machine;
+		map[i].pu = pus[pu].pu_id_in_machine;
+		
+		navl--;
+		avl[pos] = avl[navl];
+	}
+	
+	free(avl);
 }
 
 static void display_usage (int argc, char **argv)
 {
 	printf("Usage:\n");
-	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch] [-mscotch scotch_map_file]\n", argv[0]);
+	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch] [-mscotch scotch_map_file] [-rand]\n", argv[0]);
 	exit(1);
 }
 
@@ -647,7 +684,7 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map, *scotch_map;
-	int norm, args_normal, print_scotch, eval_scotch_map;
+	int norm, args_normal, print_scotch, eval_scotch_map, random_mapping;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
 
@@ -656,6 +693,7 @@ int main(int argc, char **argv)
 	args_normal = 0;
 	print_scotch = 0;
 	eval_scotch_map = 0;
+	random_mapping = 0;
 
 	i = 1;
 	while (i < argc) {
@@ -666,6 +704,10 @@ int main(int argc, char **argv)
 			}
 			else if (!strcmp(argv[i], "-pscotch")) {
 				print_scotch = 1;
+				i++;
+			}
+			else if (!strcmp(argv[i], "-rand")) {
+				random_mapping = 1;
 				i++;
 			}
 			else if (!strcmp(argv[i], "-mscotch")) {
@@ -905,141 +947,150 @@ int main(int argc, char **argv)
 		return 0;
 	}
 	
-	init.nt = nt;
+	if (random_mapping) {
+		printf("using random mapping\n");
+		
+		gettimeofday(&timer_begin, NULL);
+		generate_random_mapping(map, nt);
+		gettimeofday(&timer_end, NULL);
+	}
+	else {	
+		init.nt = nt;
 	
-	if (!use_load) {
-		for (i=0; i<nmachines; i++) {
-			init.topology = &machines[i].topology;
-			libmapping_mapping_algorithm_greedy_init(&init);
+		if (!use_load) {
+			for (i=0; i<nmachines; i++) {
+				init.topology = &machines[i].topology;
+				libmapping_mapping_algorithm_greedy_init(&init);
+			}
 		}
-	}
-	else {
+		else {
+			for (i=0; i<nmachines; i++) {
+				init.topology = &machines[i].topology;
+			#ifdef ENABLE_LOAD_BALANCE
+				libmapping_mapping_algorithm_greedy_lb_init(&init);
+			#else
+				libmapping_mapping_algorithm_greedy_init(&init);
+			#endif
+			}
+		}
+
 		for (i=0; i<nmachines; i++) {
-			init.topology = &machines[i].topology;
+			for (j=0; j<MAX_THREADS; j++) {
+				machines[i].map[j] = -1;
+			}
+		}
+
+		printf("calculating mapping...\n");
+
+		gettimeofday(&timer_begin, NULL);
+
+		if (!use_load) {
+			network_generate_groups(&m, nt, groups, nmachines);
+
+			network_map_groups_to_machines(groups, machines, nmachines);
+
+	/*		for (i=0; i<nmachines; i++) {*/
+	/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
+	/*		*/
+	/*			for (j=0; j<machines[i].ntasks; j++) {*/
+	/*				printf("%i,", machines[i].tasks[j]);*/
+	/*			}*/
+	/*		*/
+	/*			printf("\n");*/
+	/*		}*/
+	/*printf("blah\n");*/
+			for (i=0; i<nmachines; i++) {
+				mapdata.m_init = machines[i].cm;
+				mapdata.map = machines[i].map;
+
+				libmapping_mapping_algorithm_greedy_map(&mapdata);
+			}
+		}
+		else {
 		#ifdef ENABLE_LOAD_BALANCE
-			libmapping_mapping_algorithm_greedy_lb_init(&init);
+			network_generate_groups_load(&m, nt, groups, nmachines, loads);
 		#else
-			libmapping_mapping_algorithm_greedy_init(&init);
+			network_generate_groups(&m, nt, groups, nmachines);
 		#endif
+
+			network_map_groups_to_machines(groups, machines, nmachines);
+
+	/*		for (i=0; i<nmachines; i++) {*/
+	/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
+	/*		*/
+	/*			for (j=0; j<machines[i].ntasks; j++) {*/
+	/*				printf("%i,", machines[i].tasks[j]);*/
+	/*			}*/
+	/*		*/
+	/*			printf("\n");*/
+	/*		}*/
+
+			for (i=0; i<nmachines; i++) {
+				mapdata.m_init = machines[i].cm;
+				mapdata.map = machines[i].map;
+				mapdata.loads = loads;
+
+			#ifdef ENABLE_LOAD_BALANCE
+				libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
+			#else
+				libmapping_mapping_algorithm_greedy_map(&mapdata);
+			#endif
+			}
 		}
-	}
 
-	for (i=0; i<nmachines; i++) {
-		for (j=0; j<MAX_THREADS; j++) {
-			machines[i].map[j] = -1;
-		}
-	}
+		gettimeofday(&timer_end, NULL);
 
-	printf("calculating mapping...\n");
+	/*printf("blah\n");*/
+	/*exit(1);*/
+	/*for (i=0; i<nmachines; i++) {*/
+	/*	for (j=0; j<machines[i].ntasks; j++) {*/
+	/*		printf("i %i, j %i, machines[i](%s).map[j] %i\n", i, j, machines[i].name, machines[i].map[j]);*/
+	/*	}*/
+	/*}*/
 
-	gettimeofday(&timer_begin, NULL);
 
-	if (!use_load) {
-		network_generate_groups(&m, nt, groups, nmachines);
-
-		network_map_groups_to_machines(groups, machines, nmachines);
-
-/*		for (i=0; i<nmachines; i++) {*/
-/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
-/*		*/
-/*			for (j=0; j<machines[i].ntasks; j++) {*/
-/*				printf("%i,", machines[i].tasks[j]);*/
-/*			}*/
-/*		*/
-/*			printf("\n");*/
-/*		}*/
-/*printf("blah\n");*/
-		for (i=0; i<nmachines; i++) {
-			mapdata.m_init = machines[i].cm;
-			mapdata.map = machines[i].map;
-
-			libmapping_mapping_algorithm_greedy_map(&mapdata);
-		}
-	}
-	else {
-	#ifdef ENABLE_LOAD_BALANCE
-		network_generate_groups_load(&m, nt, groups, nmachines, loads);
-	#else
-		network_generate_groups(&m, nt, groups, nmachines);
-	#endif
-
-		network_map_groups_to_machines(groups, machines, nmachines);
-
-/*		for (i=0; i<nmachines; i++) {*/
-/*			printf("machine %i: %i tasks -> ", i, machines[i].ntasks);*/
-/*		*/
-/*			for (j=0; j<machines[i].ntasks; j++) {*/
-/*				printf("%i,", machines[i].tasks[j]);*/
-/*			}*/
-/*		*/
-/*			printf("\n");*/
-/*		}*/
+		for (i=0; i<nt; i++)
+			map[i].machine = NULL;
 
 		for (i=0; i<nmachines; i++) {
-			mapdata.m_init = machines[i].cm;
-			mapdata.map = machines[i].map;
-			mapdata.loads = loads;
-
-		#ifdef ENABLE_LOAD_BALANCE
-			libmapping_mapping_algorithm_greedy_lb_map(&mapdata);
-		#else
-			libmapping_mapping_algorithm_greedy_map(&mapdata);
-		#endif
+			for (j=0; j<machines[i].ntasks; j++) {
+				assert(machines[i].tasks[j] < nt);
+	/*			printf("i %i, j %i, machines[i].map[j] %i\n", i, j, machines[i].map[j]);*/
+				map[ machines[i].tasks[j] ].machine = &machines[i];
+				map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
+			}
 		}
-	}
 
-	gettimeofday(&timer_end, NULL);
-
-/*printf("blah\n");*/
-/*exit(1);*/
-/*for (i=0; i<nmachines; i++) {*/
-/*	for (j=0; j<machines[i].ntasks; j++) {*/
-/*		printf("i %i, j %i, machines[i](%s).map[j] %i\n", i, j, machines[i].name, machines[i].map[j]);*/
-/*	}*/
-/*}*/
-
-
-	for (i=0; i<nt; i++)
-		map[i].machine = NULL;
-
-	for (i=0; i<nmachines; i++) {
-		for (j=0; j<machines[i].ntasks; j++) {
-			assert(machines[i].tasks[j] < nt);
-/*			printf("i %i, j %i, machines[i].map[j] %i\n", i, j, machines[i].map[j]);*/
-			map[ machines[i].tasks[j] ].machine = &machines[i];
-			map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
+		for (i=0; i<nt; i++) {
+			assert(map[i].machine != NULL);
 		}
-	}
 
-	for (i=0; i<nt; i++) {
-		assert(map[i].machine != NULL);
-	}
+		if (use_load) {
+			printf("loads per machine:\n");
 
-	if (use_load) {
-		printf("loads per machine:\n");
+			for (i=0; i<nmachines; i++) {
+				machine_load = 0.0;
+				for (j=0; j<machines[i].ntasks; j++)
+					machine_load += loads[ machines[i].tasks[j] ];
+				printf("%s (%.3f): ", machines[i].name, machine_load);
 
-		for (i=0; i<nmachines; i++) {
-			machine_load = 0.0;
-			for (j=0; j<machines[i].ntasks; j++)
-				machine_load += loads[ machines[i].tasks[j] ];
-			printf("%s (%.3f): ", machines[i].name, machine_load);
+	/*			machine_load = 0.0;*/
+				for (j=0; j<machines[i].topology.pu_number; j++) {
+					pu_load = 0.0;
 
-/*			machine_load = 0.0;*/
-			for (j=0; j<machines[i].topology.pu_number; j++) {
-				pu_load = 0.0;
+					for (k=0; k<machines[i].ntasks; k++) {
+						if (machines[i].map[k] == j)
+							pu_load += loads[ machines[i].tasks[k] ];
+					}
 
-				for (k=0; k<machines[i].ntasks; k++) {
-					if (machines[i].map[k] == j)
-						pu_load += loads[ machines[i].tasks[k] ];
+					printf("%.3f ", pu_load);
+
+	/*				machine_load += pu_load;*/
 				}
 
-				printf("%.3f ", pu_load);
-
-/*				machine_load += pu_load;*/
+	/*			printf("--> %.3f", machine_load);*/
+				printf("\n");
 			}
-
-/*			printf("--> %.3f", machine_load);*/
-			printf("\n");
 		}
 	}
 
