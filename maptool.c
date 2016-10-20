@@ -31,6 +31,7 @@ enum mode_t {
 	MODE_RANDOM,
 	MODE_PSCOTCH,
 	MODE_MSCOTCH,
+	MODE_SIMPLE_LOAD,
 };
 
 static enum mode_t mode = MODE_EAGERMAP;
@@ -710,6 +711,7 @@ static void display_usage (int argc, char **argv)
 	printf("mode can be:\n");
 	printf("\teagermap: default, use the eagermap mapping algorithm\n");
 	printf("\trand: random mapping\n");
+	printf("\tsimpleload: simple load balancer\n");
 	printf("\tpscotch: print scotch input files to %s and %s\n", fname_scotch_matrix, fname_scotch_topo);
 	printf("\tmscotch <map_file>: read the output of scotch_gmap written in <map_file> and analyse it\n");
 	exit(1);
@@ -768,6 +770,10 @@ int main(int argc, char **argv)
 				}
 				else if (!strcmp(argv[i], "rand")) {
 					mode = MODE_RANDOM;
+					i++;
+				}
+				else if (!strcmp(argv[i], "simpleload")) {
+					mode = MODE_SIMPLE_LOAD;
 					i++;
 				}
 				else if (!strcmp(argv[i], "mscotch")) {
@@ -1044,6 +1050,52 @@ int main(int argc, char **argv)
 			machine = &machines[ map[i].machine->id ];
 			machine->tasks[ machine->ntasks ] = i;
 			machine->ntasks++;
+		}
+	}
+	else if (mode == MODE_SIMPLE_LOAD) {
+		init.nt = nt;
+		
+		for (i=0; i<nmachines; i++) {
+			init.topology = &machines[i].topology;
+			libmapping_mapping_algorithm_greedy_init(&init);
+		}
+
+		for (i=0; i<nmachines; i++) {
+			for (j=0; j<MAX_THREADS; j++) {
+				machines[i].map[j] = -1;
+			}
+		}
+
+		gettimeofday(&timer_begin, NULL);
+
+		network_generate_groups_load_simple(&m, nt, groups, nmachines, loads);
+
+		network_map_groups_to_machines(groups, machines, nmachines);
+
+		for (i=0; i<nmachines; i++) {
+			mapdata.m_init = machines[i].cm;
+			mapdata.map = machines[i].map;
+
+			libmapping_mapping_algorithm_greedy_map(&mapdata);
+		}
+
+		gettimeofday(&timer_end, NULL);
+
+		for (i=0; i<nt; i++)
+			map[i].machine = NULL;
+
+		for (i=0; i<nmachines; i++) {
+			for (j=0; j<machines[i].ntasks; j++) {
+				assert(machines[i].tasks[j] < nt);
+	/*			printf("i %i, j %i, machines[i].map[j] %i\n", i, j, machines[i].map[j]);*/
+				map[ machines[i].tasks[j] ].machine = &machines[i];
+				map[ machines[i].tasks[j] ].pu = machines[i].best_pus[ machines[i].map[j] ];
+				map[ machines[i].tasks[j] ].pu_pos = machines[i].map[j];
+			}
+		}
+
+		for (i=0; i<nt; i++) {
+			assert(map[i].machine != NULL);
 		}
 	}
 	else {	
