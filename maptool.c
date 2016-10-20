@@ -26,6 +26,15 @@ typedef struct pu_machine_t {
 	int pu_pos;
 } pu_machine_t;
 
+enum mode_t {
+	MODE_EAGERMAP,
+	MODE_RANDOM,
+	MODE_PSCOTCH,
+	MODE_MSCOTCH,
+};
+
+static enum mode_t mode = MODE_EAGERMAP;
+
 static pu_machine_t *pus;
 static int total_pus;
 
@@ -37,6 +46,9 @@ static int provided_load;
 static double *loads = NULL;
 
 static comm_matrix_t m;
+
+static const char fname_scotch_topo[] = "scotch-topology.grf";
+static const char fname_scotch_matrix[] = "scotch-comm-matrix.grf";
 
 machine_t* get_machine_by_name (char *name)
 {
@@ -693,8 +705,13 @@ static void print_mapping (map_t *map, uint32_t nt)
 
 static void display_usage (int argc, char **argv)
 {
-	printf("Usage:\n");
-	printf("\t%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-pscotch] [-mscotch scotch_map_file] [-rand] [-load]\n", argv[0]);
+	printf("Usage: ");
+	printf("%s csv_file[-n_] machine_file [load_file][-f] [-norm] [-mode mode] [-load]\n", argv[0]);
+	printf("mode can be:\n");
+	printf("\teagermap: default, use the eagermap mapping algorithm\n");
+	printf("\trand: random mapping\n");
+	printf("\tpscotch: print scotch input files to %s and %s\n", fname_scotch_matrix, fname_scotch_topo);
+	printf("\tmscotch <map_file>: read the output of scotch_gmap written in <map_file> and analyse it\n");
 	exit(1);
 }
 
@@ -713,7 +730,7 @@ int main(int argc, char **argv)
 	machine_t *machine;
 	thread_map_alg_init_t init;
 	map_t *map;
-	int norm, args_normal, print_scotch, eval_scotch_map, random_mapping;
+	int norm, args_normal;
 	
 	printf("compiled to support up to %i threads\n", MAX_THREADS);
 
@@ -721,41 +738,58 @@ int main(int argc, char **argv)
 	use_load = 0;
 	norm = 0;
 	args_normal = 0;
-	print_scotch = 0;
-	eval_scotch_map = 0;
-	random_mapping = 0;
+	mode = MODE_EAGERMAP;
 
 	i = 1;
 	while (i < argc) {
 		if (argv[i][0] == '-') {
-			if (!strcmp(argv[i], "-norm")) {
+			if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+				display_usage(argc, argv);
+			}
+			else if (!strcmp(argv[i], "-norm")) {
 				norm = 1;
 				i++;
 			}
-			else if (!strcmp(argv[i], "-pscotch")) {
-				print_scotch = 1;
-				i++;
-			}
-			else if (!strcmp(argv[i], "-load")) {
-				use_load = 1;
-				i++;
-			}
-			else if (!strcmp(argv[i], "-rand")) {
-				random_mapping = 1;
-				i++;
-			}
-			else if (!strcmp(argv[i], "-mscotch")) {
+			else if (!strcmp(argv[i], "-mode")) {
 				i++;
 				
 				if (i == argc || argv[i][0] == '-') {
-					printf("need scotch mapping file after -mscotch\n");
+					printf("need <mode> after -mode\n");
 					display_usage(argc, argv);
 				}
 				
-				fname_scotch_map = argv[i];
+				if (!strcmp(argv[i], "eagermap")) {
+					mode = MODE_EAGERMAP;
+					i++;
+				}
+				else if (!strcmp(argv[i], "pscotch")) {
+					mode = MODE_PSCOTCH;
+					i++;
+				}
+				else if (!strcmp(argv[i], "rand")) {
+					mode = MODE_RANDOM;
+					i++;
+				}
+				else if (!strcmp(argv[i], "mscotch")) {
+					mode = MODE_MSCOTCH;
+					i++;
 				
-				eval_scotch_map = 1;
+					if (i == argc || argv[i][0] == '-') {
+						printf("need scotch mapping file after -mscotch\n");
+						display_usage(argc, argv);
+					}
 				
+					fname_scotch_map = argv[i];
+				
+					i++;
+				}
+				else {
+					printf("invalid mode %s\n", argv[i]);
+					display_usage(argc, argv);
+				}
+			}
+			else if (!strcmp(argv[i], "-load")) {
+				use_load = 1;
 				i++;
 			}
 			else if (argv[i][1] == 'n' && args_normal == 0) { // automatically generate nearest neightbor matrix
@@ -960,15 +994,13 @@ int main(int argc, char **argv)
 
 	network_floyd_warshall(machines, nmachines);
 	
-	if (print_scotch) {
+	if (mode == MODE_PSCOTCH) {
 		printf("print scotch mode\n");
-		convert_topo_to_scotch_graph("scotch-topology.grf");
-		convert_matrix_to_scotch_graph(&m, "scotch-comm-matrix.grf");
-		
+		convert_topo_to_scotch_graph(fname_scotch_topo);
+		convert_matrix_to_scotch_graph(&m, fname_scotch_matrix);
 		return 0;
 	}
-	
-	if (eval_scotch_map) {
+	else if (mode == MODE_MSCOTCH) {
 		printf("evaluate scotch mapping %s\n", fname_scotch_map);
 		
 		fp = fopen(fname_scotch_map, "r");
@@ -996,7 +1028,7 @@ int main(int argc, char **argv)
 			machine->ntasks++;
 		}
 	}
-	else if (random_mapping) {
+	else if (mode == MODE_RANDOM) {
 		printf("using random mapping\n");
 		
 		gettimeofday(&timer_begin, NULL);

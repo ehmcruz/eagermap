@@ -1,4 +1,3 @@
-
 #include "libmapping.h"
 
 static char chosen[MAX_THREADS];
