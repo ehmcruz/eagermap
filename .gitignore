@@ -1,2 +1,5 @@
 *.o
 eagermap
+*.tgt
+*.grf
+scotch-map.txt
