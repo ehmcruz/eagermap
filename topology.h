@@ -42,6 +42,7 @@ typedef struct machine_t {
 	uint32_t map[MAX_THREADS];
 	uint32_t *best_pus;
 	uint32_t npus_check;
+	void *alg_init_data;
 
 	comm_matrix_t *cm;
 	int ntasks;

@@ -1104,13 +1104,13 @@ int main(int argc, char **argv)
 		if (!use_load) {
 			for (i=0; i<nmachines; i++) {
 				init.topology = &machines[i].topology;
-				libmapping_mapping_algorithm_greedy_init(&init);
+				machines[i].alg_init_data = libmapping_mapping_algorithm_greedy_init(&init);
 			}
 		}
 		else {
 			for (i=0; i<nmachines; i++) {
 				init.topology = &machines[i].topology;
-				libmapping_mapping_algorithm_greedy_lb_init(&init);
+				machines[i].alg_init_data = libmapping_mapping_algorithm_greedy_lb_init(&init);
 			}
 		}
 
@@ -1141,6 +1141,7 @@ int main(int argc, char **argv)
 	/*printf("blah\n");*/
 			for (i=0; i<nmachines; i++) {
 				mapdata.m_init = machines[i].cm;
+				mapdata.init_data = machines[i].alg_init_data;
 				mapdata.map = machines[i].map;
 
 				libmapping_mapping_algorithm_greedy_map(&mapdata);
@@ -1163,6 +1164,7 @@ int main(int argc, char **argv)
 
 			for (i=0; i<nmachines; i++) {
 				mapdata.m_init = machines[i].cm;
+				mapdata.init_data = machines[i].alg_init_data;
 				mapdata.map = machines[i].map;
 				mapdata.loads = loads;
 

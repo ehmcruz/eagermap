@@ -15,14 +15,17 @@ typedef struct thread_group_t {
 	struct thread_group_t **elements;
 } thread_group_t;
 
-static uint32_t arities[16];
-static uint32_t exec_el_in_level[16];
-static uint32_t levels_n = 0;
-static thread_group_t **groups; // one for each level
-static thread_group_t root_group;
-static comm_matrix_t matrix_[2];
-static topology_t *hardware_topology;
-static uint32_t winners[MAX_THREADS], chosen[MAX_THREADS];
+typedef struct my_data_t {
+	uint32_t arities[16];
+	uint32_t exec_el_in_level[16];
+	uint32_t levels_n;
+	thread_group_t **groups; // one for each level
+	thread_group_t root_group;
+	comm_matrix_t matrix_[2];
+	topology_t *hardware_topology;
+	uint32_t winners[MAX_THREADS];
+	uint32_t chosen[MAX_THREADS];
+} my_data_t;
 
 #define PADDING_SIZE 128
 #define MAX_PARALLEL_THREADS 1024
@@ -36,7 +39,7 @@ static greedy_parallel_t pcontext[MAX_PARALLEL_THREADS] __attribute__((aligned(P
 static int32_t pthreshold = 500;
 static uint8_t parallel_enabled = 1;
 
-static void generate_group(comm_matrix_t *m, uint32_t total_elements, uint32_t group_elements, thread_group_t *group, uint32_t level, uint32_t *chosen)
+static void generate_group(my_data_t *this, comm_matrix_t *m, uint32_t total_elements, uint32_t group_elements, thread_group_t *group, uint32_t level, uint32_t *chosen)
 {
 	weight_t w, wmax;
 	uint32_t winner = 0;
@@ -48,7 +51,7 @@ static void generate_group(comm_matrix_t *m, uint32_t total_elements, uint32_t g
 			if (!chosen[j]) {
 				w = 0;
 				for (k=0; k<i; k++) {
-					w += comm_matrix_ptr_el(m, j, winners[k]);
+					w += comm_matrix_ptr_el(m, j, this->winners[k]);
 				}
 				if (w > wmax) {
 					wmax = w;
@@ -58,14 +61,13 @@ static void generate_group(comm_matrix_t *m, uint32_t total_elements, uint32_t g
 		}
 
 		chosen[winner] = 1;
-		winners[i] = winner;
-		group->elements[i] = &groups[level-1][winner];
+		this->winners[i] = winner;
+		group->elements[i] = &this->groups[level-1][winner];
 	}
 }
 
-static void generate_group_openmp(comm_matrix_t *m, uint32_t total_elements, uint32_t group_elements, thread_group_t *group, uint32_t level, uint32_t *chosen)
+static void generate_group_openmp(my_data_t *this, comm_matrix_t *m, uint32_t total_elements, uint32_t group_elements, thread_group_t *group, uint32_t level, uint32_t *chosen)
 {
-	static uint32_t winners[MAX_THREADS];
 	weight_t w, wmax;
 	int32_t winner;
 	uint32_t i, j, k, my_id, pnt;
@@ -75,7 +77,7 @@ static void generate_group_openmp(comm_matrix_t *m, uint32_t total_elements, uin
 	for (i=0; i<group_elements; i++) { // in each iteration, I will find one element of the group
 /*		libmapping_print_matrix(m, stdout);*/
 		
-		#pragma omp parallel default(none) private(j, w, k, my_id) shared(pnt, total_elements, chosen, winners, m, i, pcontext)
+		#pragma omp parallel default(none) private(j, w, k, my_id) shared(pnt, total_elements, chosen, this, m, i, pcontext)
 		{
 			#pragma omp master
 			{
@@ -94,7 +96,7 @@ static void generate_group_openmp(comm_matrix_t *m, uint32_t total_elements, uin
 				if (!chosen[j]) {
 					w = 0;
 					for (k=0; k<i; k++) {
-						w += comm_matrix_ptr_el(m, j, winners[k]);
+						w += comm_matrix_ptr_el(m, j, this->winners[k]);
 	/*					lm_printf("   m[%u][%u] = %llu", j, winners[k], m->values[j][ winners[k] ]);*/
 					}
 	/*				lm_printf("\n");*/
@@ -121,19 +123,19 @@ static void generate_group_openmp(comm_matrix_t *m, uint32_t total_elements, uin
 		
 /*		dprintf2("   winner[%u] is %u (wmax "PRINTF_UINT64")\n", i, winner, wmax);//getchar();*/
 		chosen[winner] = 1;
-		winners[i] = winner;
-		group->elements[i] = &groups[level-1][winner];
+		this->winners[i] = winner;
+		group->elements[i] = &this->groups[level-1][winner];
 	}
 }
 
-static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t level)
+static uint32_t generate_groups(my_data_t *this, comm_matrix_t *m, uint32_t nelements, uint32_t level)
 {
 	uint32_t el_per_group, done, leftover, ngroups, avl_groups, group_i, in_group, i;
 	thread_group_t *group;
 
 /*printf("ggg nelements %i level %i levels_n %i\n", nelements, level, levels_n);*/
 
-	avl_groups = exec_el_in_level[level];
+	avl_groups = this->exec_el_in_level[level];
 
 	ngroups = (nelements > avl_groups) ? avl_groups : nelements;
 
@@ -143,7 +145,7 @@ static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t l
 	group_i = 0;
 
 	for (i=0; i<nelements; i++)
-		chosen[i] = 0;
+		this->chosen[i] = 0;
 
 /*printf("hhh nelements %i level %i levels_n %i\n", nelements, level, levels_n);*/
 
@@ -154,23 +156,23 @@ static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t l
 			leftover--;
 		}
 
-		assert(group_i < exec_el_in_level[level]);
+		assert(group_i < this->exec_el_in_level[level]);
 
-		group = &groups[level][group_i];
+		group = &this->groups[level][group_i];
 		group->type = GROUP_TYPE_GROUP;
 		group->nelements = in_group;
 		group->id = group_i;
 		
-		assert(in_group <= exec_el_in_level[level-1]);
+		assert(in_group <= this->exec_el_in_level[level-1]);
 
 /*printf("kkk nelements %i done %i group->nelements %i level %i group_i %i levels_n %i\n", nelements, done, group->nelements, level, group_i, levels_n);*/
 
 		if (parallel_enabled && nelements >= pthreshold) {
 /*			printf("going parallel nelements %i\n", nelements);*/
-			generate_group_openmp(m, nelements, in_group, group, level, chosen);
+			generate_group_openmp(this, m, nelements, in_group, group, level, this->chosen);
 		}
 		else
-			generate_group(m, nelements, in_group, group, level, chosen);
+			generate_group(this, m, nelements, in_group, group, level, this->chosen);
 
 /*printf("jjj nelements %i done %i group->nelements %i level %i group_i %i levels_n %i\n", nelements, done, group->nelements, level, group_i, levels_n);*/
 
@@ -180,7 +182,7 @@ static uint32_t generate_groups(comm_matrix_t *m, uint32_t nelements, uint32_t l
 	return ngroups;
 }
 
-static void map_groups_to_topology_ (vertex_t *v, vertex_t *from, thread_group_t *g, uint32_t *map, uint32_t level)
+static void map_groups_to_topology_ (my_data_t *this, vertex_t *v, vertex_t *from, thread_group_t *g, uint32_t *map, uint32_t level)
 {
 	uint32_t i;
 
@@ -196,29 +198,29 @@ static void map_groups_to_topology_ (vertex_t *v, vertex_t *from, thread_group_t
 		for (i=0; i<g->nelements; i++) {
 			if (v->linked[i].v != from) {
 /*printf("here %i\n", i);*/
-				map_groups_to_topology_(v->linked[i].v, v, g->elements[i], map, level+1);
+				map_groups_to_topology_(this, v->linked[i].v, v, g->elements[i], map, level+1);
 			}
 		}
 	}
 	else {
 		if (v->type == GRAPH_ELTYPE_ROOT) { // non-shared root, arity is 1
-			map_groups_to_topology_(v->linked[0].v, v, g, map, level+1);
+			map_groups_to_topology_(this, v->linked[0].v, v, g, map, level+1);
 		}
 		else { // non-shared intermediate node, arity is 2
 			if (v->linked[0].v != from)
-				map_groups_to_topology_(v->linked[0].v, v, g, map, level+1);
+				map_groups_to_topology_(this, v->linked[0].v, v, g, map, level+1);
 			else
-				map_groups_to_topology_(v->linked[1].v, v, g, map, level+1);
+				map_groups_to_topology_(this, v->linked[1].v, v, g, map, level+1);
 		}
 	}
 }
 
-static void map_groups_to_topology (topology_t *t, thread_group_t *g, uint32_t *map)
+static void map_groups_to_topology (my_data_t *this, topology_t *t, thread_group_t *g, uint32_t *map)
 {
-	map_groups_to_topology_(t->root, NULL, g, map, 0);
+	map_groups_to_topology_(this, t->root, NULL, g, map, 0);
 }
 
-static void recreate_matrix (comm_matrix_t *old, thread_group_t *group_set, uint32_t ngroups, comm_matrix_t *m)
+static void recreate_matrix (my_data_t *this, comm_matrix_t *old, thread_group_t *group_set, uint32_t ngroups, comm_matrix_t *m)
 {
 	uint32_t i, j, k, z;
 	weight_t w;
@@ -239,10 +241,18 @@ static void recreate_matrix (comm_matrix_t *old, thread_group_t *group_set, uint
 	}
 }
 
+struct params_t {
+	my_data_t *this;
+	uint32_t pos;
+};
+
 static int detect_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_vertex, edge_t *edge, uint32_t level)
 {
+	struct params_t *params = (struct params_t*)data;
+	my_data_t *this = params->this;
+
 	if ((v->type == GRAPH_ELTYPE_ROOT && v->arity >= 2) || v->arity > 2) // is shared level
-		levels_n++;
+		this->levels_n++;
 	if (v->type == GRAPH_ELTYPE_PU)
 		return 0;
 	else
@@ -251,14 +261,16 @@ static int detect_levels_with_sharers(void *data, vertex_t *v, vertex_t *previou
 
 static int detect_arity_of_levels_with_sharers(void *data, vertex_t *v, vertex_t *previous_vertex, edge_t *edge, uint32_t level)
 {
-	uint32_t *pos = (uint32_t*)data;
+	struct params_t *params = (struct params_t*)data;
+	uint32_t *pos = &params->pos;
+	my_data_t *this = params->this;
 
 	if (v->type == GRAPH_ELTYPE_ROOT && v->arity >= 2) { // is shared level
-		arities[*pos] = v->arity;
+		this->arities[*pos] = v->arity;
 		(*pos)--;
 	}
 	else if (v->arity > 2) { // is shared level
-		arities[*pos] = v->arity - 1;
+		this->arities[*pos] = v->arity - 1;
 		(*pos)--;
 	}
 	if (v->type == GRAPH_ELTYPE_PU)
@@ -267,61 +279,67 @@ static int detect_arity_of_levels_with_sharers(void *data, vertex_t *v, vertex_t
 		return 1;
 }
 
-static void alloc_group_tree (thread_map_alg_init_t *data)
+static void alloc_group_tree (my_data_t *this, thread_map_alg_init_t *data)
 {
 	uint32_t i, j;
 	
-	groups = lm_calloc(levels_n, sizeof(thread_group_t*));
-	assert(groups != NULL);
+	this->groups = lm_calloc(this->levels_n, sizeof(thread_group_t*));
+	assert(this->groups != NULL);
 	
-	for (i=0; i<levels_n; i++) {
-		groups[i] = lm_calloc(exec_el_in_level[i], sizeof(thread_group_t));
-		assert(groups[i] != NULL);
+	for (i=0; i<this->levels_n; i++) {
+		this->groups[i] = lm_calloc(this->exec_el_in_level[i], sizeof(thread_group_t));
+		assert(this->groups[i] != NULL);
 	}
 	
-	for (j=0; j<exec_el_in_level[0]; j++)
-		groups[0][j].elements = NULL;
+	for (j=0; j<this->exec_el_in_level[0]; j++)
+		this->groups[0][j].elements = NULL;
 	
-	for (i=1; i<levels_n; i++) {
-		for (j=0; j<exec_el_in_level[i]; j++) {
-			groups[i][j].elements = lm_calloc(exec_el_in_level[i-1], sizeof(thread_group_t*));
-			assert(groups[i][j].elements != NULL);
+	for (i=1; i<this->levels_n; i++) {
+		for (j=0; j<this->exec_el_in_level[i]; j++) {
+			this->groups[i][j].elements = lm_calloc(this->exec_el_in_level[i-1], sizeof(thread_group_t*));
+			assert(this->groups[i][j].elements != NULL);
 		}
 	}
 	
-	root_group.elements = lm_calloc(exec_el_in_level[levels_n-1], sizeof(thread_group_t*));
-	assert(root_group.elements != NULL);
+	this->root_group.elements = lm_calloc(this->exec_el_in_level[this->levels_n-1], sizeof(thread_group_t*));
+	assert(this->root_group.elements != NULL);
 }
 
 void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 {
-	uint32_t pos, i, pnt;
+	uint32_t i, pnt;
+	my_data_t *this;
+	struct params_t params;
+	
+	this = malloc(sizeof(my_data_t));
+	assert(this != NULL);
 
-	hardware_topology = data->topology;
-	levels_n = 2;
-	libmapping_topology_walk_pre_order(data->topology, detect_levels_with_sharers, NULL);
+	this->hardware_topology = data->topology;
+	this->levels_n = 2;
+	params.this = this;
+	libmapping_topology_walk_pre_order(data->topology, detect_levels_with_sharers, &params);
 
-	arities[0] = arities[1] = 1; // first arities should always be 1
-	pos = levels_n - 1;
-	libmapping_topology_walk_pre_order(data->topology, detect_arity_of_levels_with_sharers, &pos);
+	this->arities[0] = this->arities[1] = 1; // first arities should always be 1
+	params.pos = this->levels_n - 1;
+	libmapping_topology_walk_pre_order(data->topology, detect_arity_of_levels_with_sharers, &params);
 
-	exec_el_in_level[0] = data->nt;
-	exec_el_in_level[1] = data->topology->pu_number;
-	for (i=2; i<levels_n; i++) {
-		exec_el_in_level[i] = exec_el_in_level[i - 1] / arities[i];
+	this->exec_el_in_level[0] = data->nt;
+	this->exec_el_in_level[1] = data->topology->pu_number;
+	for (i=2; i<this->levels_n; i++) {
+		this->exec_el_in_level[i] = this->exec_el_in_level[i - 1] / this->arities[i];
 	}
 
-	for (i=levels_n-1; i>0; i--) {
-		if (exec_el_in_level[i] == 1) {
-			levels_n = i;
+	for (i=this->levels_n-1; i>0; i--) {
+		if (this->exec_el_in_level[i] == 1) {
+			this->levels_n = i;
 		}
 	}
 
-	libmapping_comm_matrix_init(&matrix_[0], data->nt);
-	libmapping_comm_matrix_init(&matrix_[1], data->nt);
+	libmapping_comm_matrix_init(&this->matrix_[0], data->nt);
+	libmapping_comm_matrix_init(&this->matrix_[1], data->nt);
 	
 /*	printf("used %u levels\n", levels_n);*/
-	alloc_group_tree(data);
+	alloc_group_tree(this, data);
 	
 	libmapping_env_get_integer("EAGERMAP_PARALLEL", &pthreshold);
 	printf("setting eagermap parallel threshold to %i\n", pthreshold);
@@ -336,13 +354,16 @@ void* libmapping_mapping_algorithm_greedy_init (thread_map_alg_init_t *data)
 	
 	printf("number of threads: %u\n", pnt);
 
-	return NULL;
+	return this;
 }
 
 void libmapping_mapping_algorithm_greedy_map (thread_map_alg_map_t *data)
 {
 	uint32_t nelements, i, ngroups, matrix_i;
 	comm_matrix_t *m, *oldm;
+	my_data_t *this;
+	
+	this = (my_data_t*)data->init_data;
 
 	matrix_i = 0;
 
@@ -352,39 +373,39 @@ void libmapping_mapping_algorithm_greedy_map (thread_map_alg_map_t *data)
 /*printf("data->m_init->nthreads %i\n", data->m_init->nthreads);*/
 
 	for (i=0; i<data->m_init->nthreads; i++) {
-		groups[0][i].type = GROUP_TYPE_THREAD;
-		groups[0][i].id = i;
-		groups[0][i].nelements = 0;
+		this->groups[0][i].type = GROUP_TYPE_THREAD;
+		this->groups[0][i].id = i;
+		this->groups[0][i].nelements = 0;
 	}
 
 	nelements = data->m_init->nthreads;
 	m = data->m_init;
 
-	for (i=1; i<levels_n; i++) {
-		ngroups = generate_groups(m, nelements, i);
+	for (i=1; i<this->levels_n; i++) {
+		ngroups = generate_groups(this, m, nelements, i);
 
 		oldm = m;
-		m = &matrix_[matrix_i];
+		m = &this->matrix_[matrix_i];
 		matrix_i ^= 1; // switch buffers on every iteration
 
-		if (i < (levels_n-1)) {
+		if (i < (this->levels_n-1)) {
 
-			recreate_matrix(oldm, groups[i], ngroups, m);
+			recreate_matrix(this, oldm, this->groups[i], ngroups, m);
 		}
 
 		nelements = ngroups;
 	}
 
-	root_group.type = GROUP_TYPE_GROUP;
-	root_group.nelements = nelements;
+	this->root_group.type = GROUP_TYPE_GROUP;
+	this->root_group.nelements = nelements;
 	
 /*printf("nelements %i exec_el_in_level[levels_n-1] %i\n", nelements, exec_el_in_level[levels_n-1]);*/
-	assert(nelements <= exec_el_in_level[levels_n-1]);
+	assert(nelements <= this->exec_el_in_level[this->levels_n-1]);
 
 	for (i=0; i<nelements; i++) {
-		root_group.elements[i] = &groups[levels_n-1][i];
+		this->root_group.elements[i] = &this->groups[this->levels_n-1][i];
 	}
 
-	map_groups_to_topology(hardware_topology, &root_group, data->map);
+	map_groups_to_topology(this, this->hardware_topology, &this->root_group, data->map);
 }
 
