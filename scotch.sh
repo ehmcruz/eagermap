@@ -10,7 +10,7 @@ if [ $# -lt 2 -o $# -gt 3 ]; then
 	exit 1
 fi
 
-if [ hash scotch_amk_grf 2>/dev/null ]; then
+if command -v scotch_amk_grf >/dev/null 2>&1; then
 	amkgrf=scotch_amk_grf
 else
 	amkgrf=amk_grf
