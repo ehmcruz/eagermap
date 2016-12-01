@@ -30,6 +30,7 @@ enum mode_t {
 	MODE_EAGERMAP,
 	MODE_RANDOM,
 	MODE_PSCOTCH,
+	MODE_PTMATCH,
 	MODE_MSCOTCH,
 	MODE_SIMPLE_LOAD,
 };
@@ -50,6 +51,7 @@ static comm_matrix_t m;
 
 static const char fname_scotch_topo[] = "scotch-topology.grf";
 static const char fname_scotch_matrix[] = "scotch-comm-matrix.grf";
+static const char fname_tmatch_matrix[] = "tmatch-comm-matrix.mat";
 
 machine_t* get_machine_by_name (char *name)
 {
@@ -581,6 +583,29 @@ static void convert_topo_to_scotch_graph (char *fname)
 	printf("scotch topology printed in file %s\n", fname);
 }
 
+static void convert_matrix_to_tmatch (comm_matrix_t *m, char *fname)
+{
+	FILE *fp;
+	int i, j;
+	
+	fp = fopen(fname, "w");
+	assert(fp != NULL);
+	
+	for (i=0; i<m->nthreads; i++) {
+		for (j=0; j<m->nthreads; j++) {
+			fprintf(fp, "%llu", comm_matrix_ptr_el(m, i, j));
+			if (j == (m->nthreads-1))
+				fprintf(fp, "\n");
+			else
+				fprintf(fp, " ");
+		}
+	}
+
+	fclose(fp);
+	
+	printf("treematch comm matrix printed in file %s\n", fname);
+}
+
 static void convert_matrix_to_scotch_graph (comm_matrix_t *m, char *fname)
 {
 	FILE *fp;
@@ -713,6 +738,7 @@ static void display_usage (int argc, char **argv)
 	printf("\trand: random mapping\n");
 	printf("\tsimpleload: simple load balancer\n");
 	printf("\tpscotch: print scotch input files to %s and %s\n", fname_scotch_matrix, fname_scotch_topo);
+	printf("\tptmatch: print treematch input comm matrix to %s\n", fname_tmatch_matrix);
 	printf("\tmscotch <map_file>: read the output of scotch_gmap written in <map_file> and analyse it\n");
 	exit(1);
 }
@@ -766,6 +792,10 @@ int main(int argc, char **argv)
 				}
 				else if (!strcmp(argv[i], "pscotch")) {
 					mode = MODE_PSCOTCH;
+					i++;
+				}
+				else if (!strcmp(argv[i], "ptmatch")) {
+					mode = MODE_PTMATCH;
 					i++;
 				}
 				else if (!strcmp(argv[i], "rand")) {
@@ -1004,6 +1034,11 @@ int main(int argc, char **argv)
 		printf("print scotch mode\n");
 		convert_topo_to_scotch_graph(fname_scotch_topo);
 		convert_matrix_to_scotch_graph(&m, fname_scotch_matrix);
+		return 0;
+	}
+	if (mode == MODE_PTMATCH) {
+		printf("print treematch mode\n");
+		convert_matrix_to_tmatch(&m, fname_tmatch_matrix);
 		return 0;
 	}
 	else if (mode == MODE_MSCOTCH) {

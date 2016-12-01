@@ -266,6 +266,7 @@ void network_generate_groups_load (comm_matrix_t *m, uint32_t ntasks, machine_ta
 	}
 	network_generate_last_group(m, ntasks, chosen, &groups[nmachines-1], loads);
 
+#if 0
 /*	for (k=0; k<5; k++) {*/
 		for (i=0, j=nmachines-1; i<j; i++, j--)
 			balance_load_exchange(&groups[i], &groups[j], loads);
@@ -276,7 +277,8 @@ void network_generate_groups_load (comm_matrix_t *m, uint32_t ntasks, machine_ta
 		
 	if (ntasks > nmachines)
 		balance_load_remove_free_pu(groups, loads, nmachines);
-	
+#endif
+
 	network_create_comm_matrices(m, groups, nmachines);
 }
 
