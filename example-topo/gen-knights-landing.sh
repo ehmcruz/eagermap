@@ -8,7 +8,10 @@ do
 	
 	for l in 0 68 136 204
 	do
-		echo -n "$((core + $l)) "
+		echo -n "$((core + $l))"
+		if [ "$l" -lt "204" ]; then
+			echo -n ","
+		fi
 	done
 	
 	echo ""
