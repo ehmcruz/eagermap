@@ -32,5 +32,7 @@ The mapping is a list of PUs to which the tasks should be mapped.
 For example, a mapping of ```7,1,0``` indicates that the first task should be mapped to PU 7, the second to PU 1, and so on.
 
 ## Publications
-A full description of EagerMap and a comparison to other algorithms is presented in: <br><br>
-Eduardo H. M. Cruz, Matthias Diener, Laércio L. Pilla, Philippe O. A. Navaux. **“An Efficient Algorithm for Communication-Based Task Mapping.”** International Conference on Parallel, Distributed, and Network-Based Processing (PDP), March 2015.
+A full description of EagerMap and a comparison to other algorithms is presented in:
+
+- Eduardo H. M. Cruz, Matthias Diener, Laércio L. Pilla, Philippe O. A. Navaux. **“An Efficient Algorithm for Communication-Based Task Mapping.”** International Conference on Parallel, Distributed, and Network-Based Processing (PDP), 2015. https://doi.org/10.1109/PDP.2015.25
+- Eduardo H. M. Cruz, Matthias Diener, Laércio L. Pilla, Philippe O. A. Navaux. **“EagerMap: A Task Mapping Algorithm to Improve Communication and Load Balancing in Clusters of Multicore Systems.”** ACM Transactions on Parallel Computing (TOPC), 2019. https://doi.org/10.1145/3309711
